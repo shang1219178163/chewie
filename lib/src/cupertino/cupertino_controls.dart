@@ -109,7 +109,11 @@ class _CupertinoControlsState extends State<CupertinoControls>
                     barHeight,
                     buttonPadding,
                   ),
-                  const Spacer(),
+                  Expanded(
+                    child: chewieController.spacerBuilder?.call(notifier, barHeight,
+                            EdgeInsets.symmetric(horizontal: buttonPadding), backgroundColor, iconColor) ??
+                        const Spacer(),
+                  ),
                   if (_subtitleOn)
                     Transform.translate(
                       offset: Offset(
@@ -275,9 +279,9 @@ class _CupertinoControlsState extends State<CupertinoControls>
                       )
                     : Row(
                         children: <Widget>[
-                          _buildSkipBack(iconColor, barHeight),
+                          if (chewieController.allowPlaySkip) _buildSkipBack(iconColor, barHeight),
                           _buildPlayPause(controller, iconColor, barHeight),
-                          _buildSkipForward(iconColor, barHeight),
+                          if (chewieController.allowPlaySkip) _buildSkipForward(iconColor, barHeight),
                           _buildPosition(iconColor),
                           _buildProgressBar(),
                           _buildRemaining(iconColor),
@@ -304,6 +308,39 @@ class _CupertinoControlsState extends State<CupertinoControls>
       child: Text(
         'LIVE',
         style: TextStyle(color: iconColor, fontSize: 12.0),
+      ),
+    );
+  }
+
+  GestureDetector buildButton({
+    required Color backgroundColor,
+    double? barHeight,
+    required double buttonPadding,
+    required Widget child,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedOpacity(
+        opacity: notifier.hideStuff ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 300),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10.0),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 10.0),
+            child: Container(
+              height: barHeight,
+              padding: EdgeInsets.only(
+                left: buttonPadding,
+                right: buttonPadding,
+              ),
+              color: backgroundColor,
+              child: Center(
+                child: child,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -416,6 +453,40 @@ class _CupertinoControlsState extends State<CupertinoControls>
           ),
         ),
       ),
+    );
+  }
+
+  GestureDetector _buildCloseButton(
+    VideoPlayerController controller,
+    Color backgroundColor,
+    Color iconColor,
+    double barHeight,
+    double buttonPadding,
+  ) {
+    return buildButton(
+      backgroundColor: backgroundColor,
+      barHeight: barHeight,
+      buttonPadding: buttonPadding,
+      child: Icon(Icons.close, color: iconColor, size: 16),
+      onTap: () {
+        setState(() {
+          notifier.hideStuff = true;
+
+          if (chewieController.isPlaying) {
+            chewieController.pause();
+          }
+          if (chewieController.isFullScreen) {
+            chewieController.exitFullScreen();
+          }
+          chewieController.onClose?.call();
+
+          _expandCollapseTimer = Timer(const Duration(milliseconds: 300), () {
+            setState(() {
+              _cancelAndRestartTimer();
+            });
+          });
+        });
+      },
     );
   }
 
@@ -624,6 +695,17 @@ class _CupertinoControlsState extends State<CupertinoControls>
               iconColor,
               barHeight,
               buttonPadding,
+            ),
+          if (chewieController.onClose != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 8.0),
+              child: _buildCloseButton(
+                controller,
+                backgroundColor,
+                iconColor,
+                barHeight,
+                buttonPadding,
+              ),
             ),
         ],
       ),
@@ -857,6 +939,42 @@ class _PlaybackSpeedDialog extends StatelessWidget {
             ),
           )
           .toList(),
+    );
+  }
+}
+
+extension CupertinoControlsExt on CupertinoControls {
+  /// creat button
+  static Widget button({
+    required PlayerNotifier notifier,
+    required Color backgroundColor,
+    double? width,
+    double? barHeight,
+    EdgeInsets? buttonPadding,
+    required Widget child,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedOpacity(
+        opacity: notifier.hideStuff ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 300),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10.0),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 10.0),
+            child: Container(
+              width: width,
+              height: barHeight,
+              padding: buttonPadding,
+              color: backgroundColor,
+              child: Center(
+                child: child,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

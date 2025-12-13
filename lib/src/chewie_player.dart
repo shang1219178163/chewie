@@ -297,7 +297,9 @@ class ChewieController extends ChangeNotifier {
     this.isLive = false,
     this.allowFullScreen = true,
     this.allowMuting = true,
+    this.onClose,
     this.allowPlaybackSpeedChanging = true,
+    this.allowPlaySkip = false,
     this.useRootNavigator = true,
     this.playbackSpeeds = const [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
     this.systemOverlaysOnEnterFullScreen,
@@ -308,6 +310,7 @@ class ChewieController extends ChangeNotifier {
     this.progressIndicatorDelay,
     this.hideControlsTimer = defaultHideControlsTimer,
     this.controlsSafeAreaMinimum = EdgeInsets.zero,
+    this.spacerBuilder,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
           'The playbackSpeeds values must all be greater than 0',
@@ -349,6 +352,7 @@ class ChewieController extends ChangeNotifier {
     bool? isLive,
     bool? allowFullScreen,
     bool? allowMuting,
+    VoidCallback? onClose,
     bool? allowPlaybackSpeedChanging,
     bool? useRootNavigator,
     Duration? hideControlsTimer,
@@ -365,6 +369,13 @@ class ChewieController extends ChangeNotifier {
       Animation<double>,
       ChewieControllerProvider,
     )? routePageBuilder,
+    Widget Function(
+      PlayerNotifier notifier,
+      double barHeight,
+      EdgeInsets buttonPadding,
+      Color backgroundColor,
+      Color iconColor,
+    )? spacerBuilder,
   }) {
     return ChewieController(
       draggableProgressBar: draggableProgressBar ?? this.draggableProgressBar,
@@ -405,6 +416,7 @@ class ChewieController extends ChangeNotifier {
       allowMuting: allowMuting ?? this.allowMuting,
       allowPlaybackSpeedChanging:
           allowPlaybackSpeedChanging ?? this.allowPlaybackSpeedChanging,
+      onClose: onClose ?? this.onClose,
       useRootNavigator: useRootNavigator ?? this.useRootNavigator,
       playbackSpeeds: playbackSpeeds ?? this.playbackSpeeds,
       systemOverlaysOnEnterFullScreen: systemOverlaysOnEnterFullScreen ??
@@ -420,6 +432,7 @@ class ChewieController extends ChangeNotifier {
       hideControlsTimer: hideControlsTimer ?? this.hideControlsTimer,
       progressIndicatorDelay:
           progressIndicatorDelay ?? this.progressIndicatorDelay,
+      spacerBuilder: spacerBuilder ?? this.spacerBuilder,
     );
   }
 
@@ -550,8 +563,13 @@ class ChewieController extends ChangeNotifier {
   /// Defines if the mute control should be shown
   final bool allowMuting;
 
+  /// has close button
+  final VoidCallback? onClose;
+
   /// Defines if the playback speed control should be shown
   final bool allowPlaybackSpeedChanging;
+
+  final bool allowPlaySkip;
 
   /// Defines if push/pop navigations use the rootNavigator
   final bool useRootNavigator;
@@ -583,6 +601,14 @@ class ChewieController extends ChangeNotifier {
   /// Adds additional padding to the controls' [SafeArea] as desired.
   /// Defaults to [EdgeInsets.zero].
   final EdgeInsets controlsSafeAreaMinimum;
+
+  Widget Function(
+    PlayerNotifier notifier,
+    double barHeight,
+    EdgeInsets buttonPadding,
+    Color backgroundColor,
+    Color iconColor,
+  )? spacerBuilder;
 
   static ChewieController of(BuildContext context) {
     final chewieControllerProvider =
