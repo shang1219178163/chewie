@@ -213,52 +213,53 @@ class _ChewieDemoState extends State<ChewieDemo> {
                   spacerBuilder: (notifier, barHeight, buttonPadding, backgroundColor, iconColor) {
                     final items = List.generate(3, (i) => "选项$i");
 
-                    const constraints = BoxConstraints(maxHeight: 200.0);
+                    const constraints = BoxConstraints(
+                      maxWidth: 100,
+                      // maxHeight: 200.0,
+                    );
 
                     return Container(
                       constraints: constraints,
-                      alignment: Alignment.bottomRight,
+                      // alignment: Alignment.bottomRight,
                       clipBehavior: Clip.hardEdge,
                       decoration: BoxDecoration(
                         // color: Colors.green,
                         border: Border.all(color: Colors.blue),
                         // borderRadius: BorderRadius.all(Radius.circular(0)),
                       ),
-                      child: ClipRect(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Container(
-                              decoration: const BoxDecoration(
-                                color: Colors.green,
-                              ),
-                              child: Text(constraints.toString()),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
                             ),
-                            ...items.map(
-                              (e) {
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                  child: CupertinoControlsExt.button(
-                                    notifier: notifier,
-                                    width: 100,
-                                    barHeight: barHeight,
-                                    buttonPadding: buttonPadding,
-                                    backgroundColor: backgroundColor,
-                                    child: Text(
-                                      e,
-                                      style: TextStyle(color: iconColor),
-                                    ),
-                                    onTap: () {
-                                      print(e);
-                                    },
+                            child: Text("${constraints.maxWidth},${constraints.maxHeight},"),
+                          ),
+                          ...items.map(
+                            (e) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                child: CupertinoControlsExt.button(
+                                  notifier: notifier,
+                                  // width: 100,
+                                  barHeight: barHeight,
+                                  buttonPadding: buttonPadding,
+                                  backgroundColor: backgroundColor,
+                                  child: Text(
+                                    e,
+                                    style: TextStyle(color: iconColor),
                                   ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
+                                  onTap: () {
+                                    print(e);
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -291,6 +292,7 @@ class _ChewieDemoState extends State<ChewieDemo> {
               ),
             ),
             buildBottom(),
+            Spacer(),
           ],
         ),
       ),
