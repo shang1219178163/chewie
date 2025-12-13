@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import '../widget/NSlidePopupRoute.dart';
+
 class ChewieDemo extends StatefulWidget {
   const ChewieDemo({
     super.key,
@@ -218,48 +220,51 @@ class _ChewieDemoState extends State<ChewieDemo> {
                       // maxHeight: 200.0,
                     );
 
-                    return Container(
-                      constraints: constraints,
-                      // alignment: Alignment.bottomRight,
-                      clipBehavior: Clip.hardEdge,
-                      decoration: BoxDecoration(
-                        // color: Colors.green,
-                        border: Border.all(color: Colors.blue),
-                        // borderRadius: BorderRadius.all(Radius.circular(0)),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Container(
-                            decoration: const BoxDecoration(
-                              color: Colors.green,
+                    return Align(
+                      alignment: Alignment.bottomRight,
+                      child: Container(
+                        constraints: constraints,
+                        clipBehavior: Clip.hardEdge,
+                        decoration: BoxDecoration(
+                          // color: Colors.green,
+                          border: Border.all(color: Colors.blue),
+                          // borderRadius: BorderRadius.all(Radius.circular(0)),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.green,
+                              ),
+                              child: Text("${constraints.maxWidth},${constraints.maxHeight},"),
                             ),
-                            child: Text("${constraints.maxWidth},${constraints.maxHeight},"),
-                          ),
-                          ...items.map(
-                            (e) {
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                child: CupertinoControlsExt.button(
-                                  notifier: notifier,
-                                  // width: 100,
-                                  barHeight: barHeight,
-                                  buttonPadding: buttonPadding,
-                                  backgroundColor: backgroundColor,
-                                  child: Text(
-                                    e,
-                                    style: TextStyle(color: iconColor),
+                            ...items.map(
+                              (e) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                  child: CupertinoControlsExt.button(
+                                    notifier: notifier,
+                                    // width: 100,
+                                    barHeight: barHeight,
+                                    buttonPadding: buttonPadding,
+                                    backgroundColor: backgroundColor,
+                                    child: Text(
+                                      e,
+                                      style: TextStyle(color: iconColor),
+                                    ),
+                                    onTap: () {
+                                      print(e);
+                                      Navigator.of(context).push(buildPopupRoute(from: Alignment.centerRight));
+                                    },
                                   ),
-                                  onTap: () {
-                                    print(e);
-                                  },
-                                ),
-                              );
-                            },
-                          ),
-                        ],
+                                );
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -292,6 +297,7 @@ class _ChewieDemoState extends State<ChewieDemo> {
               ),
             ),
             buildBottom(),
+            buildPopup(),
             Spacer(),
           ],
         ),
@@ -408,6 +414,59 @@ class _ChewieDemoState extends State<ChewieDemo> {
             ),
           )
       ],
+    );
+  }
+
+  Widget buildPopup() {
+    final items = [
+      Alignment.center,
+      Alignment.centerLeft,
+      Alignment.centerRight,
+      Alignment.topCenter,
+      Alignment.bottomCenter,
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: items.map((e) {
+        return MaterialButton(
+          onPressed: () {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Navigator.of(context).push(buildPopupRoute(alignment: e, from: e));
+            });
+          },
+          child: Text(e.toString().split(".").last),
+        );
+      }).toList(),
+    );
+  }
+
+  buildPopupRoute({required Alignment from, Alignment alignment = Alignment.centerRight}) {
+    return NSlidePopupRoute(
+      // barrierColor: Colors.red.withOpacity(0.3),
+      barrierColor: Colors.black.withOpacity(0.0),
+      from: from,
+      builder: (_) {
+        return Align(
+          alignment: alignment,
+          child: Container(
+            width: 200,
+            height: 400,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.green,
+              border: Border.all(color: Colors.blue),
+              borderRadius: BorderRadius.all(Radius.circular(0)),
+            ),
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text("dismiss"),
+            ),
+          ),
+        );
+      },
     );
   }
 

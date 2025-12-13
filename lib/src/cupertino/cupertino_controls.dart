@@ -112,13 +112,10 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
                     barHeight,
                     buttonPadding,
                   ),
-                  Flexible(
-                    child: Align(
-                      alignment: Alignment.bottomRight,
-                      child: chewieController.spacerBuilder?.call(notifier, barHeight,
-                              EdgeInsets.symmetric(horizontal: buttonPadding), backgroundColor, iconColor) ??
-                          const Spacer(),
-                    ),
+                  Expanded(
+                    child: chewieController.spacerBuilder?.call(notifier, barHeight,
+                            EdgeInsets.symmetric(horizontal: buttonPadding), backgroundColor, iconColor) ??
+                        const Spacer(),
                   ),
                   if (_subtitleOn)
                     Transform.translate(
