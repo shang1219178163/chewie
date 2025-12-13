@@ -1,8 +1,9 @@
 import 'dart:io';
-
+import 'dart:ui' as ui;
 import 'package:chewie/chewie.dart';
 import 'package:chewie_example/app/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 class ChewieDemo extends StatefulWidget {
@@ -106,6 +107,7 @@ class _ChewieDemoState extends State<ChewieDemo> {
 
     _chewieController = ChewieController(
       videoPlayerController: _videoPlayerController1,
+      aspectRatio: 16 / 9,
       autoPlay: true,
       looping: true,
       progressIndicatorDelay: bufferDelay != null ? Duration(milliseconds: bufferDelay!) : null,
@@ -118,19 +120,19 @@ class _ChewieDemoState extends State<ChewieDemo> {
           ),
         ];
       },
-      // subtitle: Subtitles(subtitles),
-      // showSubtitles: true,
-      // subtitleBuilder: (context, dynamic subtitle) => Container(
-      //   padding: const EdgeInsets.all(10.0),
-      //   child: subtitle is InlineSpan
-      //       ? RichText(
-      //           text: subtitle,
-      //         )
-      //       : Text(
-      //           subtitle.toString(),
-      //           style: const TextStyle(color: Colors.black),
-      //         ),
-      // ),
+      subtitle: Subtitles(subtitles),
+      showSubtitles: true,
+      subtitleBuilder: (context, dynamic subtitle) => Container(
+        padding: const EdgeInsets.all(10.0),
+        child: subtitle is InlineSpan
+            ? RichText(
+                text: subtitle,
+              )
+            : Text(
+                subtitle.toString(),
+                style: const TextStyle(color: Colors.black),
+              ),
+      ),
 
       hideControlsTimer: const Duration(seconds: 10),
 
@@ -146,6 +148,36 @@ class _ChewieDemoState extends State<ChewieDemo> {
       //   color: Colors.grey,
       // ),
       // autoInitialize: true,
+
+      // allowMuting: false,
+      allowPlaySkip: false,
+      // overlay: Positioned(
+      //   right: 8,
+      //   top: 8,
+      //   child: Container(
+      //     decoration: BoxDecoration(
+      //       color: Colors.transparent,
+      //       border: Border.all(color: Colors.blue),
+      //     ),
+      //     child: GestureDetector(
+      //       onTap: () {
+      //         debugPrint("${DateTime.now()} $runtimeType close");
+      //       },
+      //       child: Padding(
+      //         padding: const EdgeInsets.all(8.0),
+      //         child: Icon(Icons.close, color: Colors.white),
+      //       ),
+      //     ),
+      //   ),
+      // ),
+      allowFullScreen: true,
+      deviceOrientationsOnEnterFullScreen: [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ],
+      deviceOrientationsAfterFullScreen: [
+        DeviceOrientation.portraitUp,
+      ],
     );
   }
 
@@ -170,151 +202,241 @@ class _ChewieDemoState extends State<ChewieDemo> {
       home: Scaffold(
         appBar: AppBar(
           title: Text(widget.title),
+          actions: [
+            IconButton(
+              onPressed: () async {
+                await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+                _chewieController = _chewieController?.copyWith(
+                  onClose: () {
+                    print("onClose");
+                  },
+                  spacerBuilder: (notifier, barHeight, buttonPadding, backgroundColor, iconColor) {
+                    final items = List.generate(3, (i) => "选项$i");
+
+                    const constraints = BoxConstraints(maxHeight: 200.0);
+
+                    return Container(
+                      constraints: constraints,
+                      alignment: Alignment.bottomRight,
+                      clipBehavior: Clip.hardEdge,
+                      decoration: BoxDecoration(
+                        // color: Colors.green,
+                        border: Border.all(color: Colors.blue),
+                        // borderRadius: BorderRadius.all(Radius.circular(0)),
+                      ),
+                      child: ClipRect(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.green,
+                              ),
+                              child: Text(constraints.toString()),
+                            ),
+                            ...items.map(
+                              (e) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                  child: CupertinoControlsExt.button(
+                                    notifier: notifier,
+                                    width: 100,
+                                    barHeight: barHeight,
+                                    buttonPadding: buttonPadding,
+                                    backgroundColor: backgroundColor,
+                                    child: Text(
+                                      e,
+                                      style: TextStyle(color: iconColor),
+                                    ),
+                                    onTap: () {
+                                      print(e);
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+                setState(() {});
+              },
+              icon: Icon(Icons.refresh),
+            ),
+          ],
         ),
         body: Column(
           children: <Widget>[
             Expanded(
-              child: Center(
-                child: _chewieController != null && _chewieController!.videoPlayerController.value.isInitialized
-                    ? Chewie(
-                        controller: _chewieController!,
-                      )
-                    : const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 20),
-                          Text('Loading'),
-                        ],
-                      ),
+              child: Container(
+                color: Colors.black,
+                child: Center(
+                  child: _chewieController != null && _chewieController!.videoPlayerController.value.isInitialized
+                      ? Chewie(
+                          controller: _chewieController!,
+                        )
+                      : const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 20),
+                            Text('Loading'),
+                          ],
+                        ),
+                ),
               ),
             ),
-            TextButton(
-              onPressed: () {
-                _chewieController?.enterFullScreen();
-              },
-              child: const Text('Fullscreen'),
-            ),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _videoPlayerController1.pause();
-                        _videoPlayerController1.seekTo(Duration.zero);
-                        _createChewieController();
-                      });
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16.0),
-                      child: Text("Landscape Video"),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _videoPlayerController2.pause();
-                        _videoPlayerController2.seekTo(Duration.zero);
-                        _chewieController = _chewieController!.copyWith(
-                          videoPlayerController: _videoPlayerController2,
-                          autoPlay: true,
-                          looping: true,
-                          /* subtitle: Subtitles([
-                            Subtitle(
-                              index: 0,
-                              start: Duration.zero,
-                              end: const Duration(seconds: 10),
-                              text: 'Hello from subtitles',
-                            ),
-                            Subtitle(
-                              index: 0,
-                              start: const Duration(seconds: 10),
-                              end: const Duration(seconds: 20),
-                              text: 'Whats up? :)',
-                            ),
-                          ]),
-                          subtitleBuilder: (context, subtitle) => Container(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Text(
-                              subtitle,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ), */
-                        );
-                      });
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16.0),
-                      child: Text("Portrait Video"),
-                    ),
-                  ),
-                )
-              ],
-            ),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _platform = TargetPlatform.android;
-                      });
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16.0),
-                      child: Text("Android controls"),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _platform = TargetPlatform.iOS;
-                      });
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16.0),
-                      child: Text("iOS controls"),
-                    ),
-                  ),
-                )
-              ],
-            ),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _platform = TargetPlatform.windows;
-                      });
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16.0),
-                      child: Text("Desktop controls"),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (Platform.isAndroid)
-              ListTile(
-                title: const Text("Delay"),
-                subtitle: DelaySlider(
-                  delay: _chewieController?.progressIndicatorDelay?.inMilliseconds,
-                  onSave: (delay) async {
-                    if (delay != null) {
-                      bufferDelay = delay == 0 ? null : delay;
-                      await initializePlayer();
-                    }
-                  },
-                ),
-              )
+            buildBottom(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildBottom() {
+    return Column(
+      children: [
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: TextButton(
+                onPressed: () {
+                  setState(() {
+                    _videoPlayerController1.pause();
+                    _videoPlayerController1.seekTo(Duration.zero);
+                    _createChewieController();
+                  });
+                },
+                child: Text("Landscape Video"),
+              ),
+            ),
+            Expanded(
+              child: TextButton(
+                onPressed: () async {
+                  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+                  setState(() {
+                    // _videoPlayerController2.pause();
+                    // _videoPlayerController2.seekTo(Duration.zero);
+                    // _chewieController = _chewieController!.copyWith(
+                    //   videoPlayerController: _videoPlayerController2,
+                    //   autoPlay: true,
+                    //   looping: true,
+                    //   /* subtitle: Subtitles([
+                    //     Subtitle(
+                    //       index: 0,
+                    //       start: Duration.zero,
+                    //       end: const Duration(seconds: 10),
+                    //       text: 'Hello from subtitles',
+                    //     ),
+                    //     Subtitle(
+                    //       index: 0,
+                    //       start: const Duration(seconds: 10),
+                    //       end: const Duration(seconds: 20),
+                    //       text: 'Whats up? :)',
+                    //     ),
+                    //   ]),
+                    //   subtitleBuilder: (context, subtitle) => Container(
+                    //     padding: const EdgeInsets.all(10.0),
+                    //     child: Text(
+                    //       subtitle,
+                    //       style: const TextStyle(color: Colors.white),
+                    //     ),
+                    //   ), */
+                    // );
+                  });
+                },
+                child: Text("Portrait Video"),
+              ),
+            )
+          ],
+        ),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: TextButton(
+                onPressed: () {
+                  setState(() {
+                    _platform = TargetPlatform.android;
+                  });
+                },
+                child: Text("Android controls"),
+              ),
+            ),
+            Expanded(
+              child: TextButton(
+                onPressed: () {
+                  setState(() {
+                    _platform = TargetPlatform.iOS;
+                  });
+                },
+                child: Text("iOS controls"),
+              ),
+            )
+          ],
+        ),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: TextButton(
+                onPressed: () {
+                  setState(() {
+                    _platform = TargetPlatform.windows;
+                  });
+                },
+                child: Text("Desktop controls"),
+              ),
+            ),
+          ],
+        ),
+        if (Platform.isAndroid)
+          ListTile(
+            title: const Text("Delay"),
+            subtitle: DelaySlider(
+              delay: _chewieController?.progressIndicatorDelay?.inMilliseconds,
+              onSave: (delay) async {
+                if (delay != null) {
+                  bufferDelay = delay == 0 ? null : delay;
+                  await initializePlayer();
+                }
+              },
+            ),
+          )
+      ],
+    );
+  }
+
+  Widget buildButton({
+    required PlayerNotifier notifier,
+    required Color backgroundColor,
+    double? width,
+    double? barHeight,
+    EdgeInsets? buttonPadding,
+    required Widget child,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedOpacity(
+        opacity: notifier.hideStuff ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 300),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10.0),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 10.0),
+            child: Container(
+              width: width,
+              height: barHeight,
+              padding: buttonPadding,
+              color: backgroundColor,
+              child: Center(
+                child: child,
+              ),
+            ),
+          ),
         ),
       ),
     );
