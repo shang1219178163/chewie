@@ -19,12 +19,14 @@ import 'package:video_player/video_player.dart';
 
 class CupertinoControls extends StatefulWidget {
   const CupertinoControls({
+    this.controller,
     required this.backgroundColor,
     required this.iconColor,
     this.showPlayButton = true,
     super.key,
   });
 
+  final CupertinoControlsController? controller;
   final Color backgroundColor;
   final Color iconColor;
   final bool showPlayButton;
@@ -58,6 +60,7 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   @override
   void initState() {
     super.initState();
+    widget.controller?._attach(this);
     notifier = Provider.of<PlayerNotifier>(context, listen: false);
   }
 
@@ -142,6 +145,7 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   }
 
   void _dispose() {
+    widget.controller?._detach(this);
     controller.removeListener(_updateState);
     _hideTimer?.cancel();
     _expandCollapseTimer?.cancel();
@@ -388,15 +392,7 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
     final bool showPlayButton = widget.showPlayButton && !_latestValue.isPlaying && !_dragging;
 
     return GestureDetector(
-      onTap: _latestValue.isPlaying
-          ? _cancelAndRestartTimer
-          : () {
-              _hideTimer?.cancel();
-
-              setState(() {
-                notifier.hideStuff = false;
-              });
-            },
+      onTap: onTapHitArea,
       child: CenterPlayButton(
         backgroundColor: widget.backgroundColor,
         iconColor: widget.iconColor,
@@ -408,6 +404,18 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
     );
   }
 
+  void onTapHitArea() {
+    if (_latestValue.isPlaying) {
+      _cancelAndRestartTimer();
+      return;
+    }
+
+    _hideTimer?.cancel();
+    setState(() {
+      notifier.hideStuff = false;
+    });
+  }
+
   GestureDetector _buildMuteButton(
     VideoPlayerController controller,
     Color backgroundColor,
@@ -416,16 +424,7 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
     double buttonPadding,
   ) {
     return GestureDetector(
-      onTap: () {
-        _cancelAndRestartTimer();
-
-        if (_latestValue.volume == 0) {
-          controller.setVolume(_latestVolume ?? 0.5);
-        } else {
-          _latestVolume = controller.value.volume;
-          controller.setVolume(0.0);
-        }
-      },
+      onTap: onTapMute,
       child: AnimatedOpacity(
         opacity: notifier.hideStuff ? 0.0 : 1.0,
         duration: const Duration(milliseconds: 300),
@@ -454,6 +453,17 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
     );
   }
 
+  Future<void> onTapMute() async {
+    _cancelAndRestartTimer();
+
+    if (_latestValue.volume == 0) {
+      await controller.setVolume(_latestVolume ?? 0.5);
+    } else {
+      _latestVolume = controller.value.volume;
+      await controller.setVolume(0.0);
+    }
+  }
+
   GestureDetector _buildCloseButton(
     VideoPlayerController controller,
     Color backgroundColor,
@@ -466,26 +476,26 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
       barHeight: barHeight,
       buttonPadding: buttonPadding,
       child: Icon(Icons.close, color: iconColor, size: 16),
-      onTap: () {
-        setState(() {
-          notifier.hideStuff = true;
-
-          if (chewieController.isPlaying) {
-            chewieController.pause();
-          }
-          if (chewieController.isFullScreen) {
-            chewieController.exitFullScreen();
-          }
-          chewieController.onClose?.call();
-
-          _expandCollapseTimer = Timer(const Duration(milliseconds: 300), () {
-            setState(() {
-              _cancelAndRestartTimer();
-            });
-          });
-        });
-      },
+      onTap: onTapClose,
     );
+  }
+
+  Future<void> onTapClose() async {
+    notifier.hideStuff = true;
+
+    if (chewieController.isPlaying) {
+      await chewieController.pause();
+    }
+    if (chewieController.isFullScreen) {
+      chewieController.exitFullScreen();
+    }
+    chewieController.onClose?.call();
+
+    _expandCollapseTimer = Timer(const Duration(milliseconds: 300), () {
+      _cancelAndRestartTimer();
+      setState(() {});
+    });
+    setState(() {});
   }
 
   GestureDetector _buildPlayPause(
@@ -615,29 +625,7 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
     double barHeight,
   ) {
     return GestureDetector(
-      onTap: () async {
-        _hideTimer?.cancel();
-
-        final chosenSpeed = await showCupertinoModalPopup<double>(
-          context: context,
-          semanticsDismissible: true,
-          useRootNavigator: chewieController.useRootNavigator,
-          builder: (context) => _PlaybackSpeedDialog(
-            speeds: chewieController.playbackSpeeds,
-            selected: _latestValue.playbackSpeed,
-          ),
-        );
-
-        if (chosenSpeed != null) {
-          controller.setPlaybackSpeed(chosenSpeed);
-
-          selectedSpeed = chosenSpeed;
-        }
-
-        if (_latestValue.isPlaying) {
-          _startHideTimer();
-        }
-      },
+      onTap: onTapSpeed,
       child: Container(
         height: barHeight,
         color: Colors.transparent,
@@ -661,6 +649,30 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
         ),
       ),
     );
+  }
+
+  Future<void> onTapSpeed() async {
+    _hideTimer?.cancel();
+
+    final chosenSpeed = await showCupertinoModalPopup<double>(
+      context: context,
+      semanticsDismissible: true,
+      useRootNavigator: chewieController.useRootNavigator,
+      builder: (context) => _PlaybackSpeedDialog(
+        speeds: chewieController.playbackSpeeds,
+        selected: _latestValue.playbackSpeed,
+      ),
+    );
+
+    if (chosenSpeed != null) {
+      controller.setPlaybackSpeed(chosenSpeed);
+
+      selectedSpeed = chosenSpeed;
+    }
+
+    if (_latestValue.isPlaying) {
+      _startHideTimer();
+    }
   }
 
   Widget _buildTopBar(
@@ -933,6 +945,57 @@ class _PlaybackSpeedDialog extends StatelessWidget {
           )
           .toList(),
     );
+  }
+}
+
+/// CupertinoControls's  controller
+class CupertinoControlsController {
+  _CupertinoControlsState? _anchor;
+
+  void _attach(_CupertinoControlsState anchor) {
+    _anchor = anchor;
+  }
+
+  void _detach(_CupertinoControlsState anchor) {
+    if (_anchor == anchor) {
+      _anchor = null;
+    }
+  }
+
+  void onExpandCollapse() {
+    return _anchor?._onExpandCollapse();
+  }
+
+  Future<void> onTapClose() async {
+    return _anchor?.onTapClose();
+  }
+
+  void onTapHitArea() {
+    return _anchor?.onTapHitArea();
+  }
+
+  void onPlayPause() {
+    return _anchor?._playPause();
+  }
+
+  Future<void> onTapMute() async {
+    return _anchor?.onTapMute();
+  }
+
+  Future<void> onTapSpeed() async {
+    return _anchor?.onTapSpeed();
+  }
+
+  Future<void> onSkipForward() async {
+    return _anchor?._skipForward();
+  }
+
+  Future<void> onSkipBack() async {
+    return _anchor?._skipBack();
+  }
+
+  Future<void> onSubtitleToggle() async {
+    return _anchor?._subtitleToggle();
   }
 }
 

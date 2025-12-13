@@ -13,6 +13,8 @@ import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'cupertino/cupertino_controls.dart';
+
 typedef ChewieRoutePageBuilder = Widget Function(
   BuildContext context,
   Animation<double> animation,
@@ -311,6 +313,7 @@ class ChewieController extends ChangeNotifier {
     this.hideControlsTimer = defaultHideControlsTimer,
     this.controlsSafeAreaMinimum = EdgeInsets.zero,
     this.spacerBuilder,
+    this.cupertinoControlsController,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
           'The playbackSpeeds values must all be greater than 0',
@@ -433,6 +436,7 @@ class ChewieController extends ChangeNotifier {
       progressIndicatorDelay:
           progressIndicatorDelay ?? this.progressIndicatorDelay,
       spacerBuilder: spacerBuilder ?? this.spacerBuilder,
+      cupertinoControlsController: cupertinoControlsController ?? this.cupertinoControlsController,
     );
   }
 
@@ -609,6 +613,8 @@ class ChewieController extends ChangeNotifier {
     Color backgroundColor,
     Color iconColor,
   )? spacerBuilder;
+
+  final CupertinoControlsController? cupertinoControlsController;
 
   static ChewieController of(BuildContext context) {
     final chewieControllerProvider =
