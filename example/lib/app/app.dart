@@ -107,6 +107,8 @@ class _ChewieDemoState extends State<ChewieDemo> {
       ),
     ];
 
+    _chewieController = null;
+    _chewieController?.dispose();
     _chewieController = ChewieController(
       videoPlayerController: _videoPlayerController1,
       aspectRatio: 16 / 9,
@@ -180,6 +182,65 @@ class _ChewieDemoState extends State<ChewieDemo> {
       deviceOrientationsAfterFullScreen: [
         DeviceOrientation.portraitUp,
       ],
+      onClose: () {
+        print("onClose");
+      },
+      spacerBuilder: (notifier, barHeight, buttonPadding, backgroundColor, iconColor) {
+        final items = List.generate(3, (i) => "选项$i");
+
+        const constraints = BoxConstraints(
+          maxWidth: 100,
+          // maxHeight: 200.0,
+        );
+
+        return Align(
+          alignment: Alignment.bottomRight,
+          child: Container(
+            constraints: constraints,
+            clipBehavior: Clip.hardEdge,
+            decoration: BoxDecoration(
+              // color: Colors.green,
+              border: Border.all(color: Colors.blue),
+              // borderRadius: BorderRadius.all(Radius.circular(0)),
+            ),
+            child: Column(
+              // mainAxisSize: MainAxisSize.max,
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.green,
+                  ),
+                  child: Text("${constraints.maxWidth},${constraints.maxHeight},"),
+                ),
+                ...items.map(
+                  (e) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: CupertinoControlsExt.button(
+                        notifier: notifier,
+                        // width: 100,
+                        barHeight: barHeight,
+                        buttonPadding: buttonPadding,
+                        backgroundColor: backgroundColor,
+                        child: Text(
+                          e,
+                          style: TextStyle(color: iconColor),
+                        ),
+                        onTap: () {
+                          print(e);
+                          Navigator.of(context).push(buildPopupRoute(from: Alignment.centerRight));
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -208,67 +269,7 @@ class _ChewieDemoState extends State<ChewieDemo> {
             IconButton(
               onPressed: () async {
                 await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-                _chewieController = _chewieController?.copyWith(
-                  onClose: () {
-                    print("onClose");
-                  },
-                  spacerBuilder: (notifier, barHeight, buttonPadding, backgroundColor, iconColor) {
-                    final items = List.generate(3, (i) => "选项$i");
-
-                    const constraints = BoxConstraints(
-                      maxWidth: 100,
-                      // maxHeight: 200.0,
-                    );
-
-                    return Align(
-                      alignment: Alignment.bottomRight,
-                      child: Container(
-                        constraints: constraints,
-                        clipBehavior: Clip.hardEdge,
-                        decoration: BoxDecoration(
-                          // color: Colors.green,
-                          border: Border.all(color: Colors.blue),
-                          // borderRadius: BorderRadius.all(Radius.circular(0)),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Container(
-                              decoration: const BoxDecoration(
-                                color: Colors.green,
-                              ),
-                              child: Text("${constraints.maxWidth},${constraints.maxHeight},"),
-                            ),
-                            ...items.map(
-                              (e) {
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                  child: CupertinoControlsExt.button(
-                                    notifier: notifier,
-                                    // width: 100,
-                                    barHeight: barHeight,
-                                    buttonPadding: buttonPadding,
-                                    backgroundColor: backgroundColor,
-                                    child: Text(
-                                      e,
-                                      style: TextStyle(color: iconColor),
-                                    ),
-                                    onTap: () {
-                                      print(e);
-                                      Navigator.of(context).push(buildPopupRoute(from: Alignment.centerRight));
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
+                await initializePlayer();
                 setState(() {});
               },
               icon: Icon(Icons.refresh),

@@ -118,12 +118,15 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
                         const Spacer(),
                   ),
                   if (_subtitleOn)
-                    Transform.translate(
-                      offset: Offset(
-                        0.0,
-                        notifier.hideStuff ? barHeight * 0.8 : 0.0,
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: Transform.translate(
+                        offset: Offset(
+                          0.0,
+                          notifier.hideStuff ? barHeight * 0.8 : 0.0,
+                        ),
+                        child: _buildSubtitles(chewieController.subtitle!),
                       ),
-                      child: _buildSubtitles(chewieController.subtitle!),
                     ),
                   _buildBottomBar(backgroundColor, iconColor, barHeight),
                 ],
