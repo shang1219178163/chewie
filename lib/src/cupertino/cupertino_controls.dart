@@ -143,12 +143,12 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
 
   @override
   void dispose() {
+    widget.controlsController?._detach(this);
     _dispose();
     super.dispose();
   }
 
   void _dispose() {
-    widget.controlsController?._detach(this);
     controller.removeListener(_updateState);
     _hideTimer?.cancel();
     _expandCollapseTimer?.cancel();

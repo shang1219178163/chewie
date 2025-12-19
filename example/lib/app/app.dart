@@ -289,47 +289,9 @@ class _ChewieDemoState extends State<ChewieDemo> {
           ),
         );
       },
-      // speedDialogBuilder: (
-      //   BuildContext context,
-      //   List<double> speeds,
-      //   double selected,
-      //   Widget Function(double e, double pre)? itemBuilder,
-      // ) async {
-      //   // videoEventVN.value = e;
-      //   // slideStackController.onToggle();
-      //
-      //   return await showCupertinoModalPopup<double>(
-      //         context: context,
-      //         semanticsDismissible: true,
-      //         useRootNavigator: true,
-      //         builder: (context) {
-      //           return CupertinoActionSheet(
-      //             actions: speeds.map(
-      //               (e) {
-      //                 final iconColor = e == selected ? Colors.red : Colors.transparent;
-      //                 return CupertinoActionSheetAction(
-      //                   onPressed: () {
-      //                     Navigator.of(context).pop(e);
-      //                   },
-      //                   child: Row(
-      //                     mainAxisAlignment: MainAxisAlignment.center,
-      //                     children: [
-      //                       Text(e.toString()),
-      //                       Spacer(),
-      //                       if (e == selected) Icon(Icons.check, size: 20.0, color: iconColor),
-      //                     ],
-      //                   ),
-      //                 );
-      //               },
-      //             ).toList(),
-      //           );
-      //         },
-      //       ) ??
-      //       1.0;
-      // },
       onSpeed: () {
         videoEventVN.value = VideoButtonEvent.speed;
-        // _chewieController!.cupertinoControlsController!.notifier.hideStuff = true;
+        _chewieController?.cupertinoControlsController?.notifier.hideStuff = true;
         slideStackController.onToggle();
       },
       cupertinoControlsController: cupertinoControlsController,
