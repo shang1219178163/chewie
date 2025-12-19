@@ -19,14 +19,17 @@ import 'package:video_player/video_player.dart';
 
 class CupertinoControls extends StatefulWidget {
   const CupertinoControls({
-    this.controller,
+    super.key,
+    this.controlsController,
+    this.onSpeed,
     required this.backgroundColor,
     required this.iconColor,
     this.showPlayButton = true,
-    super.key,
   });
 
-  final CupertinoControlsController? controller;
+  final CupertinoControlsController? controlsController;
+  final VoidCallback? onSpeed;
+
   final Color backgroundColor;
   final Color iconColor;
   final bool showPlayButton;
@@ -60,7 +63,7 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   @override
   void initState() {
     super.initState();
-    widget.controller?._attach(this);
+    widget.controlsController?._attach(this);
     notifier = Provider.of<PlayerNotifier>(context, listen: false);
   }
 
@@ -113,7 +116,7 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
                     buttonPadding,
                   ),
                   Expanded(
-                    child: chewieController.spacerBuilder?.call(notifier, barHeight,
+                    child: chewieController.spacerBuilder?.call(context, notifier, barHeight,
                             EdgeInsets.symmetric(horizontal: buttonPadding), backgroundColor, iconColor) ??
                         const Spacer(),
                   ),
@@ -145,7 +148,7 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   }
 
   void _dispose() {
-    widget.controller?._detach(this);
+    widget.controlsController?._detach(this);
     controller.removeListener(_updateState);
     _hideTimer?.cancel();
     _expandCollapseTimer?.cancel();
@@ -652,6 +655,10 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   }
 
   Future<void> onTapSpeed() async {
+    if (widget.onSpeed != null) {
+      widget.onSpeed?.call();
+      return;
+    }
     _hideTimer?.cancel();
 
     final chosenSpeed = await showCupertinoModalPopup<double>(
@@ -907,6 +914,7 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
     }
 
     setState(() {
+      selectedSpeed = controller.value.playbackSpeed;
       _latestValue = controller.value;
       _subtitlesPosition = controller.value.position;
     });
@@ -917,11 +925,14 @@ class _PlaybackSpeedDialog extends StatelessWidget {
   const _PlaybackSpeedDialog({
     required List<double> speeds,
     required double selected,
+    Widget Function(double e, double pre)? itemBuilder,
   })  : _speeds = speeds,
-        _selected = selected;
+        _selected = selected,
+        _itemBuilder = itemBuilder;
 
   final List<double> _speeds;
   final double _selected;
+  final Widget Function(double e, double pre)? _itemBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -934,13 +945,14 @@ class _PlaybackSpeedDialog extends StatelessWidget {
               onPressed: () {
                 Navigator.of(context).pop(e);
               },
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (e == _selected) Icon(Icons.check, size: 20.0, color: selectedColor),
-                  Text(e.toString()),
-                ],
-              ),
+              child: _itemBuilder?.call(e, _selected) ??
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (e == _selected) Icon(Icons.check, size: 20.0, color: selectedColor),
+                      Text(e.toString()),
+                    ],
+                  ),
             ),
           )
           .toList(),
@@ -962,41 +974,53 @@ class CupertinoControlsController {
     }
   }
 
+  /// 全屏/收起
   void onExpandCollapse() {
     return _anchor?._onExpandCollapse();
   }
 
+  /// 关闭
   Future<void> onTapClose() async {
     return _anchor?.onTapClose();
   }
 
+  /// 展示工具条
   void onTapHitArea() {
     return _anchor?.onTapHitArea();
   }
 
+  /// 播放/暂停
   void onPlayPause() {
     return _anchor?._playPause();
   }
 
+  /// 静音
   Future<void> onTapMute() async {
     return _anchor?.onTapMute();
   }
 
+  /// 倍数手势
   Future<void> onTapSpeed() async {
     return _anchor?.onTapSpeed();
   }
 
+  /// 前进 15s
   Future<void> onSkipForward() async {
     return _anchor?._skipForward();
   }
 
+  /// 后退 15s
   Future<void> onSkipBack() async {
     return _anchor?._skipBack();
   }
 
+  /// 字幕
   Future<void> onSubtitleToggle() async {
     return _anchor?._subtitleToggle();
   }
+
+  /// 工具条监听器
+  PlayerNotifier get notifier => _anchor!.notifier;
 }
 
 extension CupertinoControlsExt on CupertinoControls {

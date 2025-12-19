@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 class AdaptiveControls extends StatelessWidget {
   const AdaptiveControls({
     super.key,
-    this.controller,
+    this.controlsController,
+    this.onSpeed,
   });
 
-  final CupertinoControlsController? controller;
+  final CupertinoControlsController? controlsController;
+  final VoidCallback? onSpeed;
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +25,8 @@ class AdaptiveControls extends StatelessWidget {
 
       case TargetPlatform.iOS:
         return CupertinoControls(
-          controller: controller,
+          controlsController: controlsController,
+          onSpeed: onSpeed,
           backgroundColor: Color.fromRGBO(41, 41, 41, 0.7),
           iconColor: Color.fromARGB(255, 200, 200, 200),
         );

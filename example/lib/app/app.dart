@@ -6,7 +6,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
-import '../widget/NSlidePopupRoute.dart';
+import '../widget/n_slide_stack.dart';
+
+enum VideoButtonEvent {
+  speed("倍速"),
+  highlight("剧集");
+
+  const VideoButtonEvent(this.desc);
+
+  final String desc;
+}
 
 class ChewieDemo extends StatefulWidget {
   const ChewieDemo({
@@ -28,6 +37,12 @@ class _ChewieDemoState extends State<ChewieDemo> {
   late VideoPlayerController _videoPlayerController2;
   ChewieController? _chewieController;
   int? bufferDelay;
+
+  bool get isPortrait => MediaQuery.of(context).orientation == Orientation.portrait;
+
+  final slideStackController = NSlideStackController();
+
+  final videoEventVN = ValueNotifier(VideoButtonEvent.speed);
 
   @override
   void initState() {
@@ -107,6 +122,8 @@ class _ChewieDemoState extends State<ChewieDemo> {
       ),
     ];
 
+    final cupertinoControlsController = CupertinoControlsController();
+
     _chewieController = null;
     _chewieController?.dispose();
     _chewieController = ChewieController(
@@ -137,8 +154,7 @@ class _ChewieDemoState extends State<ChewieDemo> {
                 style: const TextStyle(color: Colors.black),
               ),
       ),
-
-      hideControlsTimer: const Duration(seconds: 10),
+      hideControlsTimer: const Duration(seconds: 3),
 
       // Try playing around with some of these other options:
       showControls: true,
@@ -182,11 +198,41 @@ class _ChewieDemoState extends State<ChewieDemo> {
       deviceOrientationsAfterFullScreen: [
         DeviceOrientation.portraitUp,
       ],
+      routePageBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+        ChewieControllerProvider controllerProvider,
+      ) {
+        if (slideStackController.isVisible) {
+          slideStackController.onToggle();
+        }
+        return AnimatedBuilder(
+          animation: animation,
+          builder: (BuildContext context, Widget? child) {
+            return Scaffold(
+              resizeToAvoidBottomInset: false,
+              body: buildChewie(
+                controller: slideStackController,
+                childBuilder: (onToggle) => Container(
+                  alignment: Alignment.center,
+                  color: Colors.black,
+                  child: controllerProvider,
+                ),
+              ),
+            );
+          },
+        );
+      },
+      playbackSpeeds: const [0.5, 1.0, 1.25, 1.5, 2.0],
       onClose: () {
         print("onClose");
       },
-      spacerBuilder: (notifier, barHeight, buttonPadding, backgroundColor, iconColor) {
-        final items = List.generate(3, (i) => "选项$i");
+      spacerBuilder: (context, notifier, barHeight, buttonPadding, backgroundColor, iconColor) {
+        final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
+
+        // final items = List.generate(3, (i) => "选项$i");
+        final items = VideoButtonEvent.values;
 
         const constraints = BoxConstraints(
           maxWidth: 100,
@@ -225,12 +271,14 @@ class _ChewieDemoState extends State<ChewieDemo> {
                         buttonPadding: buttonPadding,
                         backgroundColor: backgroundColor,
                         child: Text(
-                          e,
+                          e.desc,
                           style: TextStyle(color: iconColor),
                         ),
                         onTap: () {
                           print(e);
-                          Navigator.of(context).push(buildPopupRoute(from: Alignment.centerRight));
+                          videoEventVN.value = e;
+                          slideStackController.onToggle();
+                          // Navigator.of(context).push(buildPopupRoute(from: Alignment.centerRight));
                         },
                       ),
                     );
@@ -241,6 +289,50 @@ class _ChewieDemoState extends State<ChewieDemo> {
           ),
         );
       },
+      // speedDialogBuilder: (
+      //   BuildContext context,
+      //   List<double> speeds,
+      //   double selected,
+      //   Widget Function(double e, double pre)? itemBuilder,
+      // ) async {
+      //   // videoEventVN.value = e;
+      //   // slideStackController.onToggle();
+      //
+      //   return await showCupertinoModalPopup<double>(
+      //         context: context,
+      //         semanticsDismissible: true,
+      //         useRootNavigator: true,
+      //         builder: (context) {
+      //           return CupertinoActionSheet(
+      //             actions: speeds.map(
+      //               (e) {
+      //                 final iconColor = e == selected ? Colors.red : Colors.transparent;
+      //                 return CupertinoActionSheetAction(
+      //                   onPressed: () {
+      //                     Navigator.of(context).pop(e);
+      //                   },
+      //                   child: Row(
+      //                     mainAxisAlignment: MainAxisAlignment.center,
+      //                     children: [
+      //                       Text(e.toString()),
+      //                       Spacer(),
+      //                       if (e == selected) Icon(Icons.check, size: 20.0, color: iconColor),
+      //                     ],
+      //                   ),
+      //                 );
+      //               },
+      //             ).toList(),
+      //           );
+      //         },
+      //       ) ??
+      //       1.0;
+      // },
+      onSpeed: () {
+        videoEventVN.value = VideoButtonEvent.speed;
+        // _chewieController!.cupertinoControlsController!.notifier.hideStuff = true;
+        slideStackController.onToggle();
+      },
+      cupertinoControlsController: cupertinoControlsController,
     );
   }
 
@@ -283,8 +375,11 @@ class _ChewieDemoState extends State<ChewieDemo> {
                 color: Colors.black,
                 child: Center(
                   child: _chewieController != null && _chewieController!.videoPlayerController.value.isInitialized
-                      ? Chewie(
-                          controller: _chewieController!,
+                      ? buildChewie(
+                          controller: slideStackController,
+                          childBuilder: (onToggle) => Chewie(
+                            controller: _chewieController!,
+                          ),
                         )
                       : const Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -298,10 +393,127 @@ class _ChewieDemoState extends State<ChewieDemo> {
               ),
             ),
             buildBottom(),
-            buildPopup(),
             Spacer(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget buildChewie({
+    required NSlideStackController controller,
+    required Widget Function(VoidCallback onToggle) childBuilder,
+  }) {
+    return Material(
+      color: Colors.red,
+      child: NSlideStack(
+        controller: controller,
+        drawerWidth: MediaQuery.of(context).orientation == Orientation.portrait ? 150 : 200,
+        drawerBuilder: (onToggle) => TapRegion(
+          onTapOutside: (e) {
+            debugPrint("onTapOutside");
+            if (controller.isVisible) {
+              controller.onToggle();
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.6),
+              border: Border.all(color: Colors.blue),
+            ),
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              removeBottom: true,
+              removeLeft: true,
+              removeRight: true,
+              child: ValueListenableBuilder(
+                valueListenable: videoEventVN,
+                builder: (context, value, child) {
+                  if (value == VideoButtonEvent.highlight) {
+                    return buildListView(onToggle: onToggle);
+                  }
+
+                  return buildSpeedView(onToggle: onToggle);
+                },
+              ),
+            ),
+          ),
+        ),
+        childBuilder: childBuilder,
+      ),
+    );
+  }
+
+  /// 视频列表
+  Widget buildListView({
+    VoidCallback? onTap,
+    VoidCallback? onToggle,
+    Divider? divider,
+  }) {
+    final items = List.generate(10, (i) => i);
+    return Scrollbar(
+      child: ListView.separated(
+        itemBuilder: (context, i) {
+          return Container(
+            height: 25,
+            child: ListTile(
+              dense: true,
+              onTap: () {
+                onTap?.call();
+                debugPrint("item_$i");
+                onToggle?.call();
+              },
+              title: Text(
+                "item_$i",
+                style: TextStyle(color: Colors.white),
+              ),
+              trailing: FlutterLogo(),
+            ),
+          );
+        },
+        separatorBuilder: (context, i) {
+          return divider ?? Divider(color: Colors.white.withOpacity(0.3));
+        },
+        itemCount: items.length,
+      ),
+    );
+  }
+
+  /// 倍数
+  Widget buildSpeedView({
+    VoidCallback? onTap,
+    VoidCallback? onToggle,
+    Divider? divider,
+  }) {
+    final items = _chewieController!.playbackSpeeds;
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 18),
+      child: Column(
+        children: [
+          ...items.map((e) {
+            return Expanded(
+              child: GestureDetector(
+                onTap: () async {
+                  debugPrint("$e");
+                  if (onTap != null) {
+                    onTap();
+                  } else {
+                    await _chewieController!.videoPlayerController.setPlaybackSpeed(e);
+                  }
+                  onToggle?.call();
+                },
+                child: Container(
+                  alignment: Alignment.center,
+                  child: Text(
+                    "${e}x",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            );
+          })
+        ],
       ),
     );
   }
@@ -415,59 +627,6 @@ class _ChewieDemoState extends State<ChewieDemo> {
             ),
           )
       ],
-    );
-  }
-
-  Widget buildPopup() {
-    final items = [
-      Alignment.center,
-      Alignment.centerLeft,
-      Alignment.centerRight,
-      Alignment.topCenter,
-      Alignment.bottomCenter,
-    ];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: items.map((e) {
-        return MaterialButton(
-          onPressed: () {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              Navigator.of(context).push(buildPopupRoute(alignment: e, from: e));
-            });
-          },
-          child: Text(e.toString().split(".").last),
-        );
-      }).toList(),
-    );
-  }
-
-  buildPopupRoute({required Alignment from, Alignment alignment = Alignment.centerRight}) {
-    return NSlidePopupRoute(
-      // barrierColor: Colors.red.withOpacity(0.3),
-      barrierColor: Colors.black.withOpacity(0.0),
-      from: from,
-      builder: (_) {
-        return Align(
-          alignment: alignment,
-          child: Container(
-            width: 200,
-            height: 400,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.green,
-              border: Border.all(color: Colors.blue),
-              borderRadius: BorderRadius.all(Radius.circular(0)),
-            ),
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text("dismiss"),
-            ),
-          ),
-        );
-      },
     );
   }
 

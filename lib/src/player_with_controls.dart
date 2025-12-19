@@ -27,7 +27,8 @@ class PlayerWithControls extends StatelessWidget {
       return chewieController.showControls
           ? chewieController.customControls ??
               AdaptiveControls(
-                controller: chewieController.cupertinoControlsController,
+                controlsController: chewieController.cupertinoControlsController,
+                onSpeed: chewieController.onSpeed,
               )
           : const SizedBox();
     }

@@ -22,6 +22,15 @@ typedef ChewieRoutePageBuilder = Widget Function(
   ChewieControllerProvider controllerProvider,
 );
 
+typedef ChewieSpacerBuilder = Widget Function(
+  BuildContext context,
+  PlayerNotifier notifier,
+  double barHeight,
+  EdgeInsets buttonPadding,
+  Color backgroundColor,
+  Color iconColor,
+);
+
 /// A Video Player with Material and Cupertino skins.
 ///
 /// `video_player` is pretty low level. Chewie wraps it in a friendly skin to
@@ -313,6 +322,7 @@ class ChewieController extends ChangeNotifier {
     this.hideControlsTimer = defaultHideControlsTimer,
     this.controlsSafeAreaMinimum = EdgeInsets.zero,
     this.spacerBuilder,
+    this.onSpeed,
     this.cupertinoControlsController,
   }) : assert(
           playbackSpeeds.every((speed) => speed > 0),
@@ -372,13 +382,9 @@ class ChewieController extends ChangeNotifier {
       Animation<double>,
       ChewieControllerProvider,
     )? routePageBuilder,
-    Widget Function(
-      PlayerNotifier notifier,
-      double barHeight,
-      EdgeInsets buttonPadding,
-      Color backgroundColor,
-      Color iconColor,
-    )? spacerBuilder,
+    ChewieSpacerBuilder? spacerBuilder,
+    VoidCallback? onSpeed,
+    CupertinoControlsController? cupertinoControlsController,
   }) {
     return ChewieController(
       draggableProgressBar: draggableProgressBar ?? this.draggableProgressBar,
@@ -436,6 +442,7 @@ class ChewieController extends ChangeNotifier {
       progressIndicatorDelay:
           progressIndicatorDelay ?? this.progressIndicatorDelay,
       spacerBuilder: spacerBuilder ?? this.spacerBuilder,
+      onSpeed: onSpeed ?? this.onSpeed,
       cupertinoControlsController: cupertinoControlsController ?? this.cupertinoControlsController,
     );
   }
@@ -606,13 +613,9 @@ class ChewieController extends ChangeNotifier {
   /// Defaults to [EdgeInsets.zero].
   final EdgeInsets controlsSafeAreaMinimum;
 
-  Widget Function(
-    PlayerNotifier notifier,
-    double barHeight,
-    EdgeInsets buttonPadding,
-    Color backgroundColor,
-    Color iconColor,
-  )? spacerBuilder;
+  final ChewieSpacerBuilder? spacerBuilder;
+
+  final VoidCallback? onSpeed;
 
   final CupertinoControlsController? cupertinoControlsController;
 
