@@ -54,26 +54,28 @@ class ChewieState extends State<Chewie> {
   bool _isFullScreen = false;
 
   bool get isControllerFullScreen => widget.controller.isFullScreen;
-  late PlayerNotifier notifier;
+  PlayerNotifier get notifier => widget.controller.playerNotifier;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(listener);
-    notifier = PlayerNotifier.init();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(listener);
-    notifier.dispose();
     super.dispose();
   }
 
   @override
   void didUpdateWidget(Chewie oldWidget) {
     if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(listener);
       widget.controller.addListener(listener);
+      if (_isFullScreen) {
+        widget.controller._isFullScreen = true;
+      }
     }
     super.didUpdateWidget(oldWidget);
     if (_isFullScreen != isControllerFullScreen) {
@@ -85,7 +87,7 @@ class ChewieState extends State<Chewie> {
     if (isControllerFullScreen && !_isFullScreen) {
       _isFullScreen = isControllerFullScreen;
       await _pushFullScreenWidget(context);
-    } else if (_isFullScreen) {
+    } else if (_isFullScreen && !isControllerFullScreen) {
       Navigator.of(
         context,
         rootNavigator: widget.controller.useRootNavigator,
@@ -488,7 +490,11 @@ class ChewieController extends ChangeNotifier {
   bool showSubtitles;
 
   /// The controller for the video you want to play
-  final VideoPlayerController videoPlayerController;
+  VideoPlayerController videoPlayerController;
+
+  /// 控件显示状态。归属 controller 而非某个 State，保证全屏/inline 共享同一个，
+  /// 避免 inline Chewie 卸载时 State.dispose() 误杀全屏仍在用的 notifier。
+  final PlayerNotifier playerNotifier = PlayerNotifier.init();
 
   /// Initialize the Video on Startup. This will prep the video for playback.
   final bool autoInitialize;
@@ -704,19 +710,47 @@ class ChewieController extends ChangeNotifier {
     await videoPlayerController.setVolume(volume);
   }
 
+  /// 原地替换视频源，保持 [ChewieController] 实例不变（全屏路由可继续工作）。
+  Future<void> replaceVideoPlayerController(
+    VideoPlayerController newController, {
+    bool autoPlay = true,
+  }) async {
+    if (identical(videoPlayerController, newController)) {
+      if (autoPlay && !newController.value.isPlaying) {
+        await newController.play();
+      }
+      return;
+    }
+    try {
+      await videoPlayerController.pause();
+    } catch (_) {}
+    videoPlayerController = newController;
+    await videoPlayerController.setLooping(looping);
+    notifyListeners();
+    if (autoPlay) {
+      await videoPlayerController.play();
+    }
+  }
+
   void setSubtitle(List<Subtitle> newSubtitle) {
     subtitle = Subtitles(newSubtitle);
   }
+
+  @override
+  void dispose() {
+    playerNotifier.dispose();
+    super.dispose();
+  }
 }
 
-class ChewieControllerProvider extends InheritedWidget {
+class ChewieControllerProvider extends InheritedNotifier<ChewieController> {
   const ChewieControllerProvider({
     super.key,
-    required this.controller,
+    required ChewieController controller,
     required super.child,
-  });
+  }) : super(notifier: controller);
 
-  final ChewieController controller;
+  ChewieController get controller => notifier!;
 
   @override
   bool updateShouldNotify(ChewieControllerProvider oldWidget) =>

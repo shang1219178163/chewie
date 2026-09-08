@@ -59,6 +59,8 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   // We know that _chewieController is set in didChangeDependencies
   ChewieController get chewieController => _chewieController!;
   ChewieController? _chewieController;
+  VideoPlayerController? _attachedVideoPlayerController;
+  ChewieController? _listenedChewieController;
 
   @override
   void initState() {
@@ -143,29 +145,58 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
 
   @override
   void dispose() {
+    _listenedChewieController?.removeListener(_onChewieControllerUpdated);
     widget.controlsController?._detach(this);
     _dispose();
     super.dispose();
   }
 
+  void _onChewieControllerUpdated() {
+    if (!mounted || _chewieController == null) {
+      return;
+    }
+    _bindVideoPlayerController(chewieController.videoPlayerController);
+  }
+
+  void _bindVideoPlayerController(VideoPlayerController videoPlayerController) {
+    if (_attachedVideoPlayerController == videoPlayerController) {
+      return;
+    }
+    if (_attachedVideoPlayerController != null) {
+      _dispose();
+    }
+    controller = videoPlayerController;
+    _attachedVideoPlayerController = videoPlayerController;
+    _initialize();
+  }
+
+  void _listenChewieController(ChewieController chewieController) {
+    if (_listenedChewieController == chewieController) {
+      return;
+    }
+    _listenedChewieController?.removeListener(_onChewieControllerUpdated);
+    _listenedChewieController = chewieController;
+    _listenedChewieController?.addListener(_onChewieControllerUpdated);
+  }
+
   void _dispose() {
-    controller.removeListener(_updateState);
+    if (_attachedVideoPlayerController == null) {
+      return;
+    }
+    try {
+      controller.removeListener(_updateState);
+    } catch (_) {}
     _hideTimer?.cancel();
     _expandCollapseTimer?.cancel();
     _initTimer?.cancel();
+    _attachedVideoPlayerController = null;
   }
 
   @override
   void didChangeDependencies() {
-    final oldController = _chewieController;
     _chewieController = ChewieController.of(context);
-    controller = chewieController.videoPlayerController;
-
-    if (oldController != chewieController) {
-      _dispose();
-      _initialize();
-    }
-
+    _listenChewieController(chewieController);
+    _bindVideoPlayerController(chewieController.videoPlayerController);
     super.didChangeDependencies();
   }
 
