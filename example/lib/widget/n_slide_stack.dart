@@ -1,20 +1,5 @@
-//
-//  NSlideStack.dart
-//
-//
-//  Created by shang on 2025/12/15 14:52.
-//  Copyright © 2025/12/15 shang. All rights reserved.
-//
-
 import 'package:flutter/material.dart';
-
-typedef NSlideStackPopupBuilder = Widget Function(
-  BuildContext context,
-  bool fromRight,
-  double drawerWidth,
-  Widget Function(VoidCallback onToggle) drawerBuilder,
-  Widget Function(VoidCallback onToggle) childBuilder,
-);
+import 'package:flutter/scheduler.dart';
 
 class NSlideStack extends StatefulWidget {
   const NSlideStack({
@@ -27,11 +12,9 @@ class NSlideStack extends StatefulWidget {
   });
 
   final NSlideStackController? controller;
-
   final bool fromRight;
   final double drawerWidth;
   final Widget Function(VoidCallback onToggle) drawerBuilder;
-
   final Widget Function(VoidCallback onToggle) childBuilder;
 
   @override
@@ -39,13 +22,16 @@ class NSlideStack extends StatefulWidget {
 }
 
 class _NSlideStackState extends State<NSlideStack> {
-  late final rightVN = ValueNotifier(-widget.drawerWidth);
+  late final ValueNotifier<double> rightVN = ValueNotifier<double>(-widget.drawerWidth);
+  bool _disposed = false;
 
-  bool get isVisible => rightVN.value == 0;
+  bool get isVisible => !_disposed && rightVN.value == 0;
 
   @override
   void dispose() {
+    _disposed = true;
     widget.controller?._detach(this);
+    rightVN.dispose();
     super.dispose();
   }
 
@@ -56,35 +42,51 @@ class _NSlideStackState extends State<NSlideStack> {
   }
 
   void onToggle() {
+    if (_disposed) {
+      return;
+    }
+    // 处于 build/paint 阶段时不能直接改 ValueNotifier（会触发 markNeedsBuild during build），
+    // 推迟到帧后再切换。
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _applyToggle());
+      return;
+    }
+    _applyToggle();
+  }
+
+  void _applyToggle() {
+    if (_disposed) {
+      return;
+    }
     rightVN.value = rightVN.value == 0 ? -widget.drawerWidth : 0;
   }
 
   void onDismiss(double v) {
+    if (_disposed) {
+      return;
+    }
     rightVN.value = -v;
   }
 
   @override
   void didUpdateWidget(covariant NSlideStack oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.drawerWidth != widget.drawerWidth ||
-        oldWidget.drawerBuilder != widget.drawerBuilder ||
-        oldWidget.fromRight != widget.fromRight ||
-        oldWidget.childBuilder != widget.childBuilder) {
-      if (oldWidget.drawerWidth != widget.drawerWidth) {
-        onDismiss(widget.drawerWidth);
-      }
-      setState(() {});
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._detach(this);
+      widget.controller?._attach(this);
+    }
+    if (oldWidget.drawerWidth != widget.drawerWidth) {
+      onDismiss(widget.drawerWidth);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder(
+    return ValueListenableBuilder<double>(
       valueListenable: rightVN,
-      child: widget.childBuilder(onToggle),
-      builder: (context, value, child) {
+      builder: (BuildContext context, double value, Widget? child) {
         return Stack(
+          fit: StackFit.expand,
           children: [
             child ?? const SizedBox(),
             AnimatedPositioned(
@@ -101,6 +103,7 @@ class _NSlideStackState extends State<NSlideStack> {
           ],
         );
       },
+      child: widget.childBuilder(onToggle),
     );
   }
 }
@@ -118,10 +121,9 @@ class NSlideStackController {
     }
   }
 
-  bool get isVisible => _anchor!.isVisible;
+  bool get isVisible => _anchor?.isVisible ?? false;
 
   void onToggle() {
-    assert(_anchor != null);
-    _anchor!.onToggle();
+    _anchor?.onToggle();
   }
 }

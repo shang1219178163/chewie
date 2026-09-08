@@ -1,3 +1,4 @@
+import 'package:chewie/src/chewie_full_screen_route_scope.dart';
 import 'package:chewie/src/chewie_player.dart';
 import 'package:chewie/src/helpers/adaptive_controls.dart';
 import 'package:chewie/src/notifiers/index.dart';
@@ -11,7 +12,10 @@ class PlayerWithControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ChewieController chewieController = ChewieController.of(context);
+    return _buildContent(context, chewieController);
+  }
 
+  Widget _buildContent(BuildContext context, ChewieController chewieController) {
     double calculateAspectRatio(BuildContext context) {
       final size = MediaQuery.of(context).size;
       final width = size.width;
@@ -37,6 +41,10 @@ class PlayerWithControls extends StatelessWidget {
       ChewieController chewieController,
       BuildContext context,
     ) {
+      final bool isFullScreenRoute = ChewieFullScreenRouteScope.isFullScreenRoute(context);
+      final bool showVideoSurface = !chewieController.hideVideoSurface &&
+          (!chewieController.isFullScreen || isFullScreenRoute);
+      final bool showControls = !chewieController.isFullScreen || isFullScreenRoute;
       return Stack(
         children: <Widget>[
           if (chewieController.placeholder != null)
@@ -49,8 +57,15 @@ class PlayerWithControls extends StatelessWidget {
             child: Center(
               child: AspectRatio(
                 aspectRatio: chewieController.aspectRatio ??
-                    chewieController.videoPlayerController.value.aspectRatio,
-                child: VideoPlayer(chewieController.videoPlayerController),
+                    (chewieController.hideVideoSurface
+                        ? 16 / 9
+                        : chewieController.videoPlayerController.value.aspectRatio),
+                child: showVideoSurface
+                    ? VideoPlayer(
+                        chewieController.videoPlayerController,
+                        key: ValueKey<Object>(chewieController.videoPlayerController),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
           ),
@@ -76,11 +91,9 @@ class PlayerWithControls extends StatelessWidget {
                 ),
               ),
             ),
-          if (!chewieController.isFullScreen)
-            buildControls(context, chewieController)
-          else
+          if (showControls)
             SafeArea(
-              bottom: false,
+              bottom: !chewieController.isFullScreen,
               child: buildControls(context, chewieController),
             ),
         ],
