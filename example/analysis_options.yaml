@@ -9,5 +9,4 @@ analyzer:
 linter:
   rules:
     close_sinks: true
-    prefer_const_constructors: false
     sort_constructors_first: true

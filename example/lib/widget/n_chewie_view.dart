@@ -64,6 +64,7 @@ class NChewieView<T> extends StatefulWidget {
     this.autoPlay = true,
     this.looping = true,
     this.playbackSpeeds = const [0.5, 1.0, 1.25, 1.5, 2.0],
+    this.activeColor = Colors.amber,
     this.progressIndicatorDelay,
     this.onIndexChanged,
     this.onLoadFailed,
@@ -83,6 +84,9 @@ class NChewieView<T> extends StatefulWidget {
   final bool autoPlay;
   final bool looping;
   final List<double> playbackSpeeds;
+
+  /// 剧集 / 倍速侧栏选中高亮色。
+  final Color activeColor;
   final Duration? progressIndicatorDelay;
   final ValueChanged<int>? onIndexChanged;
   final void Function(int index, Object error)? onLoadFailed;
@@ -498,6 +502,7 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
       valueListenable: currPlayIndexVN,
       builder: (BuildContext context, int selectedIndex, Widget? child) {
         final Color highlight = Colors.white.withValues(alpha: 0.12);
+        final Color activeColor = widget.activeColor;
         return Scrollbar(
           child: ListView.separated(
             itemCount: widget.items.length,
@@ -527,12 +532,12 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
                         child: Text(
                           _titleAt(i),
                           style: TextStyle(
-                            color: isSelected ? Colors.amber : Colors.white,
+                            color: isSelected ? activeColor : Colors.white,
                           ),
                         ),
                       ),
                       if (isSelected)
-                        const Icon(Icons.play_arrow, color: Colors.amber, size: 20),
+                        Icon(Icons.play_arrow, color: activeColor, size: 20),
                     ],
                   ),
                 ),
@@ -547,24 +552,47 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
   Widget _buildSpeedView({VoidCallback? onToggle}) {
     final List<double> items =
         _chewieController?.playbackSpeeds ?? widget.playbackSpeeds;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 18),
-      child: Column(
-        children: [
-          for (final double speed in items)
-            Expanded(
-              child: GestureDetector(
-                onTap: () async {
-                  await _chewieController?.videoPlayerController.setPlaybackSpeed(speed);
-                  onToggle?.call();
-                },
-                child: Center(
-                  child: Text('${speed}x', style: const TextStyle(color: Colors.white)),
+    final VideoPlayerController? player =
+        _chewieController?.videoPlayerController;
+    final Color activeColor = widget.activeColor;
+
+    Widget buildList(double currentSpeed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        child: Column(
+          children: [
+            for (final double speed in items)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    await player?.setPlaybackSpeed(speed);
+                    onToggle?.call();
+                  },
+                  child: Center(
+                    child: Text(
+                      '${speed}x',
+                      style: TextStyle(
+                        color: (currentSpeed - speed).abs() < 0.001
+                            ? activeColor
+                            : Colors.white,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-        ],
-      ),
+          ],
+        ),
+      );
+    }
+
+    if (player == null) {
+      return buildList(1.0);
+    }
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: player,
+      builder: (BuildContext context, VideoPlayerValue value, _) {
+        return buildList(value.playbackSpeed);
+      },
     );
   }
 }

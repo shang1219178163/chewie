@@ -42,7 +42,7 @@ class CupertinoControls extends StatefulWidget {
 
 class _CupertinoControlsState extends State<CupertinoControls> with SingleTickerProviderStateMixin {
   late PlayerNotifier notifier;
-  VideoPlayerValue _latestValue = VideoPlayerValue.uninitialized();
+  late VideoPlayerValue _latestValue;
   double? _latestVolume;
   Timer? _hideTimer;
   final marginSize = 5.0;
@@ -147,15 +147,8 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   void dispose() {
     _listenedChewieController?.removeListener(_onChewieControllerUpdated);
     widget.controlsController?._detach(this);
-    _initTimer?.cancel();
     _dispose();
     super.dispose();
-  }
-
-  /// 让当前 anchor（controller._anchor）放弃本 State：当 controller 被新 State 接管
-  /// 或本 State 不再激活时调用，避免残留指向已销毁 State 的孤儿 anchor。
-  void detach() {
-    widget.controlsController?._detach(this);
   }
 
   void _onChewieControllerUpdated() {
@@ -202,23 +195,9 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   @override
   void didChangeDependencies() {
     _chewieController = ChewieController.of(context);
-    notifier = Provider.of<PlayerNotifier>(context, listen: true);
     _listenChewieController(chewieController);
     _bindVideoPlayerController(chewieController.videoPlayerController);
     super.didChangeDependencies();
-  }
-
-  @override
-  void didUpdateWidget(CupertinoControls oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controlsController != widget.controlsController) {
-      oldWidget.controlsController?._detach(this);
-      widget.controlsController?._attach(this);
-    }
-    if (!mounted || _chewieController == null) {
-      return;
-    }
-    _bindVideoPlayerController(chewieController.videoPlayerController);
   }
 
   GestureDetector _buildOptionsButton(
@@ -783,11 +762,10 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
 
   void _cancelAndRestartTimer() {
     _hideTimer?.cancel();
-    if (!mounted) {
-      return;
-    }
+
     setState(() {
       notifier.hideStuff = false;
+
       _startHideTimer();
     });
   }
@@ -804,10 +782,9 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
 
     if (chewieController.showControlsOnInitialize) {
       _initTimer = Timer(const Duration(milliseconds: 200), () {
-        if (!mounted) {
-          return;
-        }
-        notifier.hideStuff = false;
+        setState(() {
+          notifier.hideStuff = false;
+        });
       });
     }
   }
@@ -882,30 +859,25 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   }
 
   void _playPause() {
-    final VideoPlayerController activeController = chewieController.videoPlayerController;
-    final VideoPlayerValue activeValue = activeController.value;
-    final isFinished = activeValue.position >= activeValue.duration && activeValue.duration.inSeconds > 0;
+    final isFinished = _latestValue.position >= _latestValue.duration && _latestValue.duration.inSeconds > 0;
 
     setState(() {
-      if (activeController.value.isPlaying) {
+      if (controller.value.isPlaying) {
         notifier.hideStuff = false;
         _hideTimer?.cancel();
-        activeController.pause();
+        controller.pause();
       } else {
         _cancelAndRestartTimer();
 
-        if (!activeController.value.isInitialized) {
-          activeController.initialize().then((_) {
-            if (!mounted) {
-              return;
-            }
-            chewieController.videoPlayerController.play();
+        if (!controller.value.isInitialized) {
+          controller.initialize().then((_) {
+            controller.play();
           });
         } else {
           if (isFinished) {
-            activeController.seekTo(Duration.zero);
+            controller.seekTo(Duration.zero);
           }
-          activeController.play();
+          controller.play();
         }
       }
     });
@@ -940,9 +912,6 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
         ? ChewieController.defaultHideControlsTimer
         : chewieController.hideControlsTimer;
     _hideTimer = Timer(hideControlsTimer, () {
-      if (!mounted) {
-        return;
-      }
       setState(() {
         notifier.hideStuff = true;
       });
@@ -957,17 +926,8 @@ class _CupertinoControlsState extends State<CupertinoControls> with SingleTicker
   }
 
   void _updateState() {
-    if (!mounted || _chewieController == null) {
-      return;
-    }
-    if (chewieController.hideVideoSurface) {
-      return;
-    }
-    final VideoPlayerController activeController = chewieController.videoPlayerController;
-    if (activeController != controller) {
-      _bindVideoPlayerController(activeController);
-      return;
-    }
+    if (!mounted) return;
+
     // display the progress bar indicator only after the buffering delay if it has been set
     if (chewieController.progressIndicatorDelay != null) {
       if (controller.value.isBuffering) {
@@ -1036,10 +996,6 @@ class CupertinoControlsController {
   _CupertinoControlsState? _anchor;
 
   void _attach(_CupertinoControlsState anchor) {
-    // 全屏与 inline 的 State 竞争同一个单例 controller。新 State attach 时，
-    // 让旧 anchor 的 State 从本 controller 脱钩（它内部 _detach 只清空指向自己的 anchor），
-    // 保证 _anchor 始终指向最新激活的 State，避免残留孤儿 anchor。
-    _anchor?.detach();
     _anchor = anchor;
   }
 
