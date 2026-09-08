@@ -4,39 +4,37 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
-/// 原生播放器池：任意时刻最多保留 [maxPlayerCount] 个实例。
-///
-/// 切源策略为 dispose-first：先释放全部旧实例，再创建并 initialize 新实例，
-/// 避免 iOS 上同时存在多个 AVPlayer 导致后续 initialize 静默失败。
+/// 单槽原生播放器池：切源时先释放旧实例，再创建新实例（dispose-first）。
 class NativeVideoPlayerPool {
   NativeVideoPlayerPool({
-    this.maxPlayerCount = 2,
     this.initializeTimeout = const Duration(seconds: 20),
     this.maxRetryCount = 2,
   });
 
-  final int maxPlayerCount;
   final Duration initializeTimeout;
   final int maxRetryCount;
-  final Set<VideoPlayerController> _tracked = <VideoPlayerController>{};
+  VideoPlayerController? _current;
 
-  int get activeCount => _tracked.length;
+  int get activeCount => _current == null ? 0 : 1;
 
-  /// 创建新播放器前先清空池内全部实例（含 current）。
+  /// 释放旧播放器后创建并 initialize 新播放器。
   Future<VideoPlayerController> acquireForSwitch(Uri uri) async {
     await releaseAll();
     Object? lastError;
     for (int attempt = 0; attempt <= maxRetryCount; attempt++) {
       if (attempt > 0) {
-        debugPrint('NativeVideoPlayerPool retry #$attempt, uri=$uri');
+        debugPrint('NativeVideoPlayerPool retry #$attempt uri=$uri');
         await Future<void>.delayed(Duration(milliseconds: 300 * attempt));
       }
       try {
-        return await _createAndInitialize(uri);
+        final VideoPlayerController player = await _createAndInitialize(uri);
+        _current = player;
+        debugPrint('NativeVideoPlayerPool acquire uri=$uri');
+        return player;
       } on Object catch (error) {
         lastError = error;
         debugPrint('NativeVideoPlayerPool acquire failed: $error');
-        if (!_isRetryableError(error) || attempt >= maxRetryCount) {
+        if (!_isRetryable(error) || attempt >= maxRetryCount) {
           rethrow;
         }
       }
@@ -49,15 +47,8 @@ class NativeVideoPlayerPool {
     try {
       await player.initialize().timeout(initializeTimeout);
       if (player.value.hasError) {
-        throw StateError(
-          player.value.errorDescription ?? '视频初始化失败',
-        );
+        throw StateError(player.value.errorDescription ?? '视频初始化失败');
       }
-      _tracked.add(player);
-      assert(activeCount <= maxPlayerCount);
-      debugPrint(
-        'NativeVideoPlayerPool acquire, activeCount=$activeCount, uri=$uri',
-      );
       return player;
     } on Object catch (_) {
       try {
@@ -67,10 +58,9 @@ class NativeVideoPlayerPool {
     }
   }
 
-  bool _isRetryableError(Object error) {
-    final String message = error is PlatformException
-        ? '${error.message} ${error.details}'
-        : error.toString();
+  bool _isRetryable(Object error) {
+    final String message =
+        error is PlatformException ? '${error.message} ${error.details}' : '$error';
     return message.contains('502') ||
         message.contains('503') ||
         message.contains('504') ||
@@ -81,20 +71,16 @@ class NativeVideoPlayerPool {
   }
 
   Future<void> releaseAll() async {
-    final List<VideoPlayerController> all = _tracked.toList(growable: false);
-    _tracked.clear();
-    for (final VideoPlayerController player in all) {
-      await _disposePlayer(player);
+    final VideoPlayerController? player = _current;
+    _current = null;
+    if (player == null) {
+      return;
     }
-  }
-
-  Future<void> _disposePlayer(VideoPlayerController player) async {
     try {
       await player.pause();
     } catch (_) {}
     try {
       await player.dispose().timeout(const Duration(seconds: 2));
     } catch (_) {}
-    debugPrint('NativeVideoPlayerPool dispose, activeCount=$activeCount');
   }
 }
