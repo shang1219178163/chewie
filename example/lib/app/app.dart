@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:chewie_example/app/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -30,7 +27,6 @@ class ChewieDemo extends StatefulWidget {
 
 class _ChewieDemoState extends State<ChewieDemo> {
   TargetPlatform? _platform;
-  int? bufferDelay;
   final videoViewController = NChewieViewController();
 
   final List<VideoModel> videos = const [
@@ -58,12 +54,9 @@ class _ChewieDemoState extends State<ChewieDemo> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: widget.title,
-      theme: AppTheme.light.copyWith(
-        platform: _platform ?? Theme.of(context).platform,
-      ),
-      home: Scaffold(
+    return Theme(
+      data: Theme.of(context).copyWith(platform: _platform ?? Theme.of(context).platform),
+      child: Scaffold(
         appBar: AppBar(
           title: Text(widget.title),
           actions: [
@@ -81,13 +74,13 @@ class _ChewieDemoState extends State<ChewieDemo> {
         ),
         body: Column(
           children: <Widget>[
-            Expanded(
+            Container(
+              height: 300,
               child: NChewieView<VideoModel>(
                 controller: videoViewController,
                 items: videos,
                 urlOf: (item) => item.url,
                 titleOf: (item, int index) => item.title,
-                progressIndicatorDelay: bufferDelay != null ? Duration(milliseconds: bufferDelay!) : null,
               ),
             ),
             buildBottom(),
@@ -101,7 +94,7 @@ class _ChewieDemoState extends State<ChewieDemo> {
     return Column(
       children: [
         Row(
-          children: <Widget>[
+          children: [
             Expanded(
               child: TextButton(
                 onPressed: () {
@@ -109,116 +102,42 @@ class _ChewieDemoState extends State<ChewieDemo> {
                   player?.pause();
                   player?.seekTo(Duration.zero);
                 },
-                child: const Text('Landscape Video'),
+                child: const Text('Pause & Seek 0'),
               ),
             ),
             Expanded(
               child: TextButton(
-                onPressed: () async {
-                  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-                },
-                child: const Text('Portrait Video'),
+                onPressed: () => SystemChrome.setPreferredOrientations(
+                  [DeviceOrientation.portraitUp],
+                ),
+                child: const Text('Portrait'),
               ),
             ),
           ],
         ),
         Row(
-          children: <Widget>[
+          children: [
             Expanded(
               child: TextButton(
-                onPressed: () => setState(() => _platform = TargetPlatform.android),
+                onPressed: () {
+                  _platform = TargetPlatform.android;
+                  setState(() {});
+                },
                 child: const Text('Android controls'),
               ),
             ),
             Expanded(
               child: TextButton(
-                onPressed: () => setState(() => _platform = TargetPlatform.iOS),
+                onPressed: () {
+                  _platform = TargetPlatform.iOS;
+                  setState(() {});
+                },
                 child: const Text('iOS controls'),
               ),
             ),
           ],
         ),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: TextButton(
-                onPressed: () => setState(() => _platform = TargetPlatform.windows),
-                child: const Text('Desktop controls'),
-              ),
-            ),
-          ],
-        ),
-        if (Platform.isAndroid)
-          ListTile(
-            title: const Text('Delay'),
-            subtitle: DelaySlider(
-              delay: videoViewController.chewieController?.progressIndicatorDelay?.inMilliseconds,
-              onSave: (int? delay) async {
-                if (delay == null) {
-                  return;
-                }
-                setState(() {
-                  bufferDelay = delay == 0 ? null : delay;
-                });
-                await videoViewController.switchVideo(
-                  videoViewController.currentIndex,
-                  recreateController: true,
-                );
-              },
-            ),
-          ),
       ],
-    );
-  }
-}
-
-class DelaySlider extends StatefulWidget {
-  const DelaySlider({super.key, required this.delay, required this.onSave});
-
-  final int? delay;
-  final void Function(int?) onSave;
-
-  @override
-  State<DelaySlider> createState() => _DelaySliderState();
-}
-
-class _DelaySliderState extends State<DelaySlider> {
-  int? delay;
-  bool saved = false;
-
-  @override
-  void initState() {
-    super.initState();
-    delay = widget.delay;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const int max = 1000;
-    return ListTile(
-      title: Text(
-        'Progress indicator delay ${delay != null ? "${delay.toString()} MS" : ""}',
-      ),
-      subtitle: Slider(
-        value: delay != null ? (delay! / max) : 0,
-        onChanged: (double value) {
-          delay = (value * max).toInt();
-          setState(() {
-            saved = false;
-          });
-        },
-      ),
-      trailing: IconButton(
-        icon: const Icon(Icons.save),
-        onPressed: saved
-            ? null
-            : () {
-                widget.onSave(delay);
-                setState(() {
-                  saved = true;
-                });
-              },
-      ),
     );
   }
 }

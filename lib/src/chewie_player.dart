@@ -496,6 +496,17 @@ class ChewieController extends ChangeNotifier {
   /// 避免 inline Chewie 卸载时 State.dispose() 误杀全屏仍在用的 notifier。
   final PlayerNotifier playerNotifier = PlayerNotifier.init();
 
+  /// 切源时临时隐藏原生 VideoPlayer 表面，避免访问已 dispose 的 controller。
+  bool hideVideoSurface = false;
+
+  void setHideVideoSurface(bool value) {
+    if (hideVideoSurface == value) {
+      return;
+    }
+    hideVideoSurface = value;
+    notifyListeners();
+  }
+
   /// Initialize the Video on Startup. This will prep the video for playback.
   final bool autoInitialize;
 
@@ -716,15 +727,18 @@ class ChewieController extends ChangeNotifier {
     bool autoPlay = true,
   }) async {
     if (identical(videoPlayerController, newController)) {
+      hideVideoSurface = false;
       if (autoPlay && !newController.value.isPlaying) {
         await newController.play();
       }
+      notifyListeners();
       return;
     }
     try {
       await videoPlayerController.pause();
     } catch (_) {}
     videoPlayerController = newController;
+    hideVideoSurface = false;
     await videoPlayerController.setLooping(looping);
     notifyListeners();
     if (autoPlay) {

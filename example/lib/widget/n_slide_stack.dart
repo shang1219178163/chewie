@@ -28,12 +28,6 @@ class _NSlideStackState extends State<NSlideStack> {
   bool get isVisible => !_disposed && rightVN.value == 0;
 
   @override
-  void initState() {
-    super.initState();
-    widget.controller?._attach(this);
-  }
-
-  @override
   void dispose() {
     _disposed = true;
     widget.controller?._detach(this);
@@ -41,10 +35,18 @@ class _NSlideStackState extends State<NSlideStack> {
     super.dispose();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    widget.controller?._attach(this);
+  }
+
   void onToggle() {
     if (_disposed) {
       return;
     }
+    // 处于 build/paint 阶段时不能直接改 ValueNotifier（会触发 markNeedsBuild during build），
+    // 推迟到帧后再切换。
     if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _applyToggle());
       return;
@@ -82,7 +84,6 @@ class _NSlideStackState extends State<NSlideStack> {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<double>(
       valueListenable: rightVN,
-      child: widget.childBuilder(onToggle),
       builder: (BuildContext context, double value, Widget? child) {
         return Stack(
           fit: StackFit.expand,
@@ -102,6 +103,7 @@ class _NSlideStackState extends State<NSlideStack> {
           ],
         );
       },
+      child: widget.childBuilder(onToggle),
     );
   }
 }

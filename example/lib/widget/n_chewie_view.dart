@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import '../video/native_video_player_pool.dart';
 import 'n_slide_stack.dart';
 
 enum NChewieDrawerEvent {
@@ -43,7 +44,8 @@ class NChewieViewController {
   ChewieController? get chewieController => _chewieController?.call();
 
   Future<bool> switchVideo(int index, {bool recreateController = false}) {
-    return _switchVideo?.call(index, recreateController: recreateController) ?? Future<bool>.value(false);
+    return _switchVideo?.call(index, recreateController: recreateController) ??
+        Future<bool>.value(false);
   }
 }
 
@@ -62,6 +64,7 @@ class NChewieView<T> extends StatefulWidget {
     this.autoPlay = true,
     this.looping = true,
     this.playbackSpeeds = const [0.5, 1.0, 1.25, 1.5, 2.0],
+    this.activeColor = Colors.amber,
     this.progressIndicatorDelay,
     this.onIndexChanged,
     this.onLoadFailed,
@@ -81,6 +84,9 @@ class NChewieView<T> extends StatefulWidget {
   final bool autoPlay;
   final bool looping;
   final List<double> playbackSpeeds;
+
+  /// 剧集 / 倍速侧栏选中高亮色。
+  final Color activeColor;
   final Duration? progressIndicatorDelay;
   final ValueChanged<int>? onIndexChanged;
   final void Function(int index, Object error)? onLoadFailed;
@@ -90,31 +96,26 @@ class NChewieView<T> extends StatefulWidget {
 }
 
 class _NChewieViewState<T> extends State<NChewieView<T>> {
-  VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
   CupertinoControlsController? _cupertinoControlsController;
 
   final slideStackController = NSlideStackController();
   final fullScreenSlideStackController = NSlideStackController();
-  final _chewieKey = GlobalKey();
+  final _videoPlayerPool = NativeVideoPlayerPool();
   final drawerEventVN = ValueNotifier(NChewieDrawerEvent.speed);
   final currPlayIndexVN = ValueNotifier<int>(0);
 
   Future<void> _switchOperation = Future<void>.value();
   bool _isSwitching = false;
-
-  int get currPlayIndex => currPlayIndexVN.value;
+  bool _wasFullScreen = false;
+  bool _closed = false;
 
   @override
   void initState() {
     super.initState();
-    widget.controller?._bind(
-      switchVideo: switchVideo,
-      currentIndex: () => currPlayIndex,
-      chewieController: () => _chewieController,
-    );
-    final int index = widget.initialIndex.clamp(0, widget.items.isEmpty ? 0 : widget.items.length - 1);
+    _bindController(widget.controller);
     if (widget.items.isNotEmpty) {
+      final int index = widget.initialIndex.clamp(0, widget.items.length - 1);
       switchVideo(index, recreateController: true);
     }
   }
@@ -124,49 +125,75 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?._unbind();
-      widget.controller?._bind(
-        switchVideo: switchVideo,
-        currentIndex: () => currPlayIndex,
-        chewieController: () => _chewieController,
-      );
+      _bindController(widget.controller);
+    }
+    if (oldWidget.items != widget.items || oldWidget.urlOf != widget.urlOf) {
+      _onItemsChanged();
     }
   }
 
   @override
   void dispose() {
+    _closed = true;
     widget.controller?._unbind();
     drawerEventVN.dispose();
     currPlayIndexVN.dispose();
-    _videoPlayerController?.dispose();
+    _chewieController?.removeListener(_onChewieFullScreenChanged);
+    unawaited(_videoPlayerPool.releaseAll());
     _chewieController?.dispose();
     super.dispose();
   }
 
-  String _urlAt(int index) => widget.urlOf(widget.items[index]);
-
-  String _titleAt(int index) {
-    final titleOf = widget.titleOf;
-    if (titleOf != null) {
-      return titleOf(widget.items[index], index);
-    }
-    return '视频 ${index + 1}';
+  void _bindController(NChewieViewController? controller) {
+    controller?._bind(
+      switchVideo: switchVideo,
+      currentIndex: () => currPlayIndexVN.value,
+      chewieController: () => _chewieController,
+    );
   }
 
-  /// 串行切集：先释放旧播放器，再创建新播放器。
+  void _onItemsChanged() {
+    if (widget.items.isEmpty) {
+      _chewieController?.removeListener(_onChewieFullScreenChanged);
+      unawaited(_videoPlayerPool.releaseAll());
+      _chewieController?.dispose();
+      _chewieController = null;
+      _cupertinoControlsController = null;
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
+    final int next = currPlayIndexVN.value.clamp(0, widget.items.length - 1);
+    switchVideo(next, recreateController: true);
+  }
+
+  String _urlAt(int index) => widget.urlOf(widget.items[index]);
+
+  String _titleAt(int index) =>
+      widget.titleOf?.call(widget.items[index], index) ?? '视频 ${index + 1}';
+
+  /// 串行切集，避免并发创建多个原生播放器。
   Future<bool> switchVideo(int index, {bool recreateController = false}) {
-    if (index < 0 || index >= widget.items.length) {
+    if (_closed || index < 0 || index >= widget.items.length) {
       return Future<bool>.value(false);
     }
     if (!recreateController && index == currPlayIndexVN.value) {
       return Future<bool>.value(false);
     }
+
     final Completer<bool> completer = Completer<bool>();
     if (!_isSwitching && mounted) {
       _isSwitching = true;
       setState(() {});
     }
+
     _switchOperation = _switchOperation.then((_) async {
-      if (!recreateController && index == currPlayIndexVN.value) {
+      if (_closed || (!recreateController && index == currPlayIndexVN.value)) {
+        if (mounted && _isSwitching) {
+          _isSwitching = false;
+          setState(() {});
+        }
         completer.complete(false);
         return;
       }
@@ -175,7 +202,7 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
           await _performSwitchVideo(index, recreateController: recreateController),
         );
       } on Object catch (error, stack) {
-        debugPrint('NChewieView switchVideo failed: $error\n$stack');
+        debugPrint('NChewieView switchVideo queue error: $error\n$stack');
         if (!completer.isCompleted) {
           completer.complete(false);
         }
@@ -185,51 +212,46 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
   }
 
   Future<bool> _performSwitchVideo(int index, {bool recreateController = false}) async {
+    if (_closed) {
+      return false;
+    }
     _isSwitching = true;
     if (mounted) {
       setState(() {});
     }
-    final VideoPlayerController? oldPlayer = _videoPlayerController;
     try {
-      try {
-        await oldPlayer?.pause();
-      } catch (_) {}
+      // dispose-first：先藏表面再创建，保证 initialize 时最多 1 个 AVPlayer。
+      _chewieController?.setHideVideoSurface(true);
       await WidgetsBinding.instance.endOfFrame;
-      try {
-        await oldPlayer?.dispose();
-      } catch (_) {}
-      _videoPlayerController = null;
-
-      final VideoPlayerController player = VideoPlayerController.networkUrl(Uri.parse(_urlAt(index)));
-      await player.initialize();
-      if (!mounted) {
-        await player.dispose();
+      await WidgetsBinding.instance.endOfFrame;
+      if (_closed) {
         return false;
       }
-      _videoPlayerController = player;
-      if (_chewieController == null || recreateController) {
-        _cupertinoControlsController = null;
-        _createChewieController();
-      } else {
-        await _chewieController!.replaceVideoPlayerController(
-          player,
-          autoPlay: widget.autoPlay,
-        );
+
+      final VideoPlayerController player =
+          await _videoPlayerPool.acquireForSwitch(Uri.parse(_urlAt(index)));
+      if (_closed || !mounted) {
+        await _videoPlayerPool.releaseAll();
+        return false;
       }
+
+      await _adoptVideoPlayer(player, recreateController: recreateController);
       currPlayIndexVN.value = index;
       widget.onIndexChanged?.call(index);
       return true;
     } on Object catch (error, stack) {
-      debugPrint('NChewieView switchVideo error: $error\n$stack');
+      debugPrint('NChewieView switch failed: $error\n$stack');
       widget.onLoadFailed?.call(index, error);
       if (mounted && widget.onLoadFailed == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${_titleAt(index)} 加载失败'),
+            content: Text('${_titleAt(index)} 加载失败，请稍后重试'),
+            duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
+      await _recoverCurrentVideo();
       return false;
     } finally {
       if (mounted) {
@@ -239,26 +261,69 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
     }
   }
 
-  void _createChewieController() {
-    final CupertinoControlsController controls = _cupertinoControlsController ??= CupertinoControlsController();
+  Future<void> _recoverCurrentVideo() async {
+    if (_closed || widget.items.isEmpty) {
+      return;
+    }
+    try {
+      final VideoPlayerController recovered =
+          await _videoPlayerPool.acquireForSwitch(Uri.parse(_urlAt(currPlayIndexVN.value)));
+      if (_closed || !mounted) {
+        await _videoPlayerPool.releaseAll();
+        return;
+      }
+      await _adoptVideoPlayer(recovered);
+    } on Object catch (error) {
+      debugPrint('NChewieView recover failed: $error');
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
+  Future<void> _adoptVideoPlayer(
+    VideoPlayerController player, {
+    bool recreateController = false,
+  }) async {
     final ChewieController? oldChewie = _chewieController;
+    if (oldChewie == null || recreateController) {
+      oldChewie?.removeListener(_onChewieFullScreenChanged);
+      if (recreateController) {
+        _cupertinoControlsController = null;
+      }
+      _createChewieController(player);
+      if (mounted) {
+        setState(() {});
+      }
+      await _disposeChewieSafely(oldChewie);
+      return;
+    }
+    await oldChewie.replaceVideoPlayerController(player, autoPlay: widget.autoPlay);
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _disposeChewieSafely(ChewieController? chewie) async {
+    if (chewie == null || chewie == _chewieController) {
+      return;
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    if (chewie != _chewieController) {
+      chewie.dispose();
+    }
+  }
+
+  void _createChewieController(VideoPlayerController player) {
+    final CupertinoControlsController controls =
+        _cupertinoControlsController ??= CupertinoControlsController();
+
     _chewieController = ChewieController(
-      videoPlayerController: _videoPlayerController!,
+      videoPlayerController: player,
       aspectRatio: widget.aspectRatio,
       autoPlay: widget.autoPlay,
       looping: widget.looping,
       progressIndicatorDelay: widget.progressIndicatorDelay,
-      additionalOptions: (BuildContext context) {
-        return <OptionItem>[
-          OptionItem(
-            onTap: (BuildContext context) {
-              switchVideo((currPlayIndexVN.value + 1) % widget.items.length);
-            },
-            iconData: Icons.live_tv_sharp,
-            title: 'Toggle Video Src',
-          ),
-        ];
-      },
       hideControlsTimer: const Duration(seconds: 3),
       showControls: true,
       allowPlaySkip: false,
@@ -305,8 +370,10 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
         Color backgroundColor,
         Color iconColor,
       ) {
-        final stackController =
-            ChewieController.of(context).isFullScreen ? fullScreenSlideStackController : slideStackController;
+        final NSlideStackController stackController =
+            ChewieController.of(context).isFullScreen
+                ? fullScreenSlideStackController
+                : slideStackController;
         return Align(
           alignment: Alignment.bottomRight,
           child: ConstrainedBox(
@@ -338,19 +405,34 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
       onSpeed: () {
         drawerEventVN.value = NChewieDrawerEvent.speed;
         _chewieController?.cupertinoControlsController?.notifier.hideStuff = true;
-        final stackController =
-            (_chewieController?.isFullScreen ?? false) ? fullScreenSlideStackController : slideStackController;
+        final NSlideStackController stackController =
+            (_chewieController?.isFullScreen ?? false)
+                ? fullScreenSlideStackController
+                : slideStackController;
         stackController.onToggle();
       },
       cupertinoControlsController: controls,
     );
-    oldChewie?.dispose();
+    _chewieController!.addListener(_onChewieFullScreenChanged);
+  }
+
+  void _onChewieFullScreenChanged() {
+    final bool isFull = _chewieController?.isFullScreen ?? false;
+    if (_wasFullScreen && !isFull && fullScreenSlideStackController.isVisible) {
+      fullScreenSlideStackController.onToggle();
+    }
+    _wasFullScreen = isFull;
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final VideoPlayerController? player = _chewieController?.videoPlayerController;
-    final bool isVideoReady = player != null && player.value.isInitialized && !player.value.hasError;
+    final bool isVideoReady =
+        player != null && player.value.isInitialized && !player.value.hasError;
+
     return ColoredBox(
       color: Colors.black,
       child: Stack(
@@ -362,10 +444,7 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
               offstage: _chewieController!.isFullScreen || _isSwitching || !isVideoReady,
               child: _buildSlideHost(
                 controller: slideStackController,
-                childBuilder: (_) => Chewie(
-                  key: _chewieKey,
-                  controller: _chewieController!,
-                ),
+                childBuilder: (_) => Chewie(controller: _chewieController!),
               ),
             ),
           if (_isSwitching || !isVideoReady)
@@ -405,11 +484,10 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
             removeRight: true,
             child: ValueListenableBuilder<NChewieDrawerEvent>(
               valueListenable: drawerEventVN,
-              builder: (BuildContext context, NChewieDrawerEvent value, Widget? child) {
-                if (value == NChewieDrawerEvent.series) {
-                  return _buildSeriesList(onToggle: onToggle);
-                }
-                return _buildSpeedView(onToggle: onToggle);
+              builder: (BuildContext context, NChewieDrawerEvent value, _) {
+                return value == NChewieDrawerEvent.series
+                    ? _buildSeriesList(onToggle: onToggle)
+                    : _buildSpeedView(onToggle: onToggle);
               },
             ),
           ),
@@ -424,10 +502,12 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
       valueListenable: currPlayIndexVN,
       builder: (BuildContext context, int selectedIndex, Widget? child) {
         final Color highlight = Colors.white.withValues(alpha: 0.12);
+        final Color activeColor = widget.activeColor;
         return Scrollbar(
           child: ListView.separated(
             itemCount: widget.items.length,
-            separatorBuilder: (_, __) => Divider(color: Colors.white.withValues(alpha: 0.25), height: 1),
+            separatorBuilder: (_, __) =>
+                Divider(color: Colors.white.withValues(alpha: 0.25), height: 1),
             itemBuilder: (BuildContext context, int i) {
               final bool isSelected = i == selectedIndex;
               return GestureDetector(
@@ -437,8 +517,7 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
                     onToggle?.call();
                     return;
                   }
-                  final bool ok = await switchVideo(i);
-                  if (ok) {
+                  if (await switchVideo(i)) {
                     onToggle?.call();
                   }
                 },
@@ -453,11 +532,12 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
                         child: Text(
                           _titleAt(i),
                           style: TextStyle(
-                            color: isSelected ? Colors.amber : Colors.white,
+                            color: isSelected ? activeColor : Colors.white,
                           ),
                         ),
                       ),
-                      if (isSelected) const Icon(Icons.play_arrow, color: Colors.amber, size: 20),
+                      if (isSelected)
+                        Icon(Icons.play_arrow, color: activeColor, size: 20),
                     ],
                   ),
                 ),
@@ -470,28 +550,49 @@ class _NChewieViewState<T> extends State<NChewieView<T>> {
   }
 
   Widget _buildSpeedView({VoidCallback? onToggle}) {
-    final List<double> items = _chewieController?.playbackSpeeds ?? widget.playbackSpeeds;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 18),
-      child: Column(
-        children: [
-          for (final double speed in items)
-            Expanded(
-              child: GestureDetector(
-                onTap: () async {
-                  await _chewieController?.videoPlayerController.setPlaybackSpeed(speed);
-                  onToggle?.call();
-                },
-                child: Center(
-                  child: Text(
-                    '${speed}x',
-                    style: const TextStyle(color: Colors.white),
+    final List<double> items =
+        _chewieController?.playbackSpeeds ?? widget.playbackSpeeds;
+    final VideoPlayerController? player =
+        _chewieController?.videoPlayerController;
+    final Color activeColor = widget.activeColor;
+
+    Widget buildList(double currentSpeed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        child: Column(
+          children: [
+            for (final double speed in items)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    await player?.setPlaybackSpeed(speed);
+                    onToggle?.call();
+                  },
+                  child: Center(
+                    child: Text(
+                      '${speed}x',
+                      style: TextStyle(
+                        color: (currentSpeed - speed).abs() < 0.001
+                            ? activeColor
+                            : Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
-      ),
+          ],
+        ),
+      );
+    }
+
+    if (player == null) {
+      return buildList(1.0);
+    }
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: player,
+      builder: (BuildContext context, VideoPlayerValue value, _) {
+        return buildList(value.playbackSpeed);
+      },
     );
   }
 }
